@@ -116,16 +116,13 @@ tasks:
       - sed -e 's|__REMOTE_USER__|{{.REMOTE_USER}}|g' -e 's|__REMOTE_HOME__|{{.REMOTE_HOME}}|g' deploy/local.gha-runner-controller.plist > rendered/{{.LABEL}}.plist
       - plutil -lint rendered/{{.LABEL}}.plist
       - HOME={{.REMOTE_HOME}} go run ./cmd/gha-runner-controller -gen-config > rendered/config.yaml
-    generates:
-      - rendered/{{.LABEL}}.plist
-      - rendered/config.yaml
 
   install:
     desc: One-time install on the target host (local default, REMOTE_HOST=host for remote; binary + plist + config if missing; does NOT start the daemon - use 'task start')
     deps: [deploy, render]
     cmds:
       - '{{.CP}} rendered/{{.LABEL}}.plist rendered/config.yaml {{.RPREFIX}}/tmp/'
-      - sh -c 'test -f app.pem && {{.CP}} app.pem {{.RPREFIX}}/tmp/ || true'
+      - sh -c 'test ! -f app.pem || {{.CP}} app.pem {{.RPREFIX}}/tmp/'
       - '{{.RUN}} "mkdir -p {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}} && (test -f {{.REMOTE_CONFIG_DIR}}/config.yaml || cp /tmp/config.yaml {{.REMOTE_CONFIG_DIR}}/config.yaml) && chmod 600 {{.REMOTE_CONFIG_DIR}}/config.yaml && rm -f /tmp/config.yaml && (test ! -f /tmp/app.pem || (mv /tmp/app.pem {{.REMOTE_CONFIG_DIR}}/app.pem && chmod 600 {{.REMOTE_CONFIG_DIR}}/app.pem)) && sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist"'
       - sh -c 'test -f app.pem || echo "NOTE - place the GitHub App PEM at {{.REMOTE_CONFIG_DIR}}/app.pem (chmod 600); edit config.yaml (github.org/appID/installationID)"'
       - echo "NOTE - daemon installed but NOT started; run 'task start' when ready"
