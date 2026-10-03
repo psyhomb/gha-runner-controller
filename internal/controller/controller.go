@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"gha-runner-controller/internal/config"
@@ -66,10 +65,9 @@ type Controller struct {
 	vmm *vm.Manager
 	jit JITProvider
 
-	mu    sync.Mutex
-	vms   map[string]*vmState
-	vmSeq atomic.Int64
-	wg    sync.WaitGroup
+	mu  sync.Mutex
+	vms map[string]*vmState
+	wg  sync.WaitGroup
 
 	// Boot-failure backoff: consecutive boot failures pause scale-up, since
 	// the demand signal (broker statistics) does not decay on its own.
@@ -297,8 +295,7 @@ func (c *Controller) deregisterRunner(ctx context.Context, name string) {
 
 // startVM starts one VM lifecycle if capacity allows.
 func (c *Controller) startVM(ctx context.Context) {
-	seq := c.vmSeq.Add(1)
-	name := fmt.Sprintf("%s-%d-%d", c.cfg.VMNameBase(), seq, time.Now().Unix())
+	name := fmt.Sprintf("%s-%d", c.cfg.VMNameBase(), time.Now().UnixNano())
 	jobCtx, cancel := context.WithCancel(ctx)
 	st := &vmState{vmName: name, cancel: cancel}
 	if !c.trackVM(st) {

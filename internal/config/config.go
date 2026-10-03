@@ -132,7 +132,7 @@ func (c Config) EffectiveSSHUser() string {
 }
 
 // VMNameBase returns the base for VM/runner names: namePrefix when set,
-// otherwise the scale set name. VMs are named <base>-<seq>-<unixts>; the base
+// otherwise the scale set name. VMs are named <base>-<unixts-ns>; the base
 // is also the orphan-cleanup namespace (single controller per base).
 func (c Config) VMNameBase() string {
 	if c.VM.NamePrefix != "" {
