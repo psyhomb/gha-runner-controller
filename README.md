@@ -145,6 +145,25 @@ chmod 600 ~/.config/gha-runner-controller/config.yaml
 # edit config.yaml: github.org, github.appID, github.installationID
 ```
 
+### Installing a release binary
+
+Download release assets with `curl`, not a browser: browser downloads are
+flagged with `com.apple.quarantine`, and since the binary is ad-hoc signed
+(not notarized), Gatekeeper kills it on exec (`zsh: killed`). `curl` never
+sets the quarantine flag:
+
+```bash
+curl -L -o gha-runner-controller-darwin-arm64.tar.gz \
+  https://github.com/psyhomb/gha-runner-controller/releases/latest/download/gha-runner-controller-darwin-arm64.tar.gz
+curl -L -o checksums.txt \
+  https://github.com/psyhomb/gha-runner-controller/releases/latest/download/checksums.txt
+sha256sum -c checksums.txt   # on macOS: shasum -a 256 -c checksums.txt
+tar xzf gha-runner-controller-darwin-arm64.tar.gz
+```
+
+(Already downloaded via a browser? `xattr -d com.apple.quarantine
+gha-runner-controller` clears the flag.)
+
 ## Configuration (config.yaml)
 
 `internal/config/config.template.yaml` documents **every parameter inline**
