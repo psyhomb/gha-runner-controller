@@ -39,14 +39,17 @@ jobs:
           GOARCH: arm64
 
       - name: Package binary
-        run: mv gha-runner-controller gha-runner-controller-darwin-arm64
+        run: |
+          tar -czf gha-runner-controller-darwin-arm64.tar.gz gha-runner-controller
+          sha256sum gha-runner-controller-darwin-arm64.tar.gz > checksums.txt
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ github.ref_name }}" \
-            gha-runner-controller-darwin-arm64 \
+            gha-runner-controller-darwin-arm64.tar.gz \
+            checksums.txt \
             --title "${{ github.ref_name }}" \
             --generate-notes \
             $(case "${{ github.ref_name }}" in *-*) echo --prerelease ;; esac)
