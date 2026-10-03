@@ -234,12 +234,12 @@ func (m *Manager) WriteRunnerConfig(ctx context.Context, ip string, files map[st
 // StartRunner starts the runner inside the guest, detached. The JIT config
 // files were already written by WriteRunnerConfig, so plain ./run.sh picks
 // them up from disk - no --jitconfig on the command line. The login profile
-// is sourced in the SAME shell that spawns run.sh so the full PATH (Homebrew
-// etc.) is inherited by the runner process and every job step; the .path
-// file is written for any future svc.sh-based flow (only runsvc.sh reads it
-// back).
+// is sourced in the SAME shell that spawns run.sh so the full PATH is
+// inherited by the runner process and every job step: ~/.zprofile on macOS
+// (Homebrew), ~/.profile on Linux guests. The .path file is written for any
+// future svc.sh-based flow (only runsvc.sh reads it back).
 func (m *Manager) StartRunner(ctx context.Context, ip string) error {
-	remote := `cd ~/actions-runner && if [ -f ~/.zprofile ]; then source ~/.zprofile; fi; echo "$PATH" > .path; nohup ./run.sh > /tmp/runner.log 2>&1 < /dev/null &`
+	remote := `cd ~/actions-runner && if [ -f ~/.zprofile ]; then source ~/.zprofile; elif [ -f ~/.profile ]; then source ~/.profile; fi; echo "$PATH" > .path; nohup ./run.sh > /tmp/runner.log 2>&1 < /dev/null &`
 	_, err := m.runSSH(ctx, ip, nil, remote)
 	return err
 }

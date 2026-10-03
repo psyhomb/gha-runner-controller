@@ -104,6 +104,12 @@ tart ip --wait 60 macos-tahoe-xcode-gha-base
 tart stop macos-tahoe-xcode-gha-base
 ```
 
+Linux base images work too (tart supports Linux VMs). The guest contract is
+OS-agnostic: sshd + the controller's SSH key, the actions runner (linux/arm64
+for Linux guests) unpacked at `~/actions-runner`, and its runtime deps. The
+runner is started with the login profile sourced so jobs inherit the full
+PATH - `~/.zprofile` on macOS (Homebrew), `~/.profile` on Linux.
+
 ### 3. Controller install
 
 Host prerequisites (one-time):
