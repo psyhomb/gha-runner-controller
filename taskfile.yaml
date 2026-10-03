@@ -111,12 +111,11 @@ tasks:
 
   render:
     desc: Render plist + config templates with the target user/home (local user/home unless REMOTE_HOST is set)
-    deps: [build]
     cmds:
       - mkdir -p rendered
       - sed -e 's|__REMOTE_USER__|{{.REMOTE_USER}}|g' -e 's|__REMOTE_HOME__|{{.REMOTE_HOME}}|g' deploy/local.gha-runner-controller.plist > rendered/{{.LABEL}}.plist
       - plutil -lint rendered/{{.LABEL}}.plist
-      - HOME={{.REMOTE_HOME}} ./{{.BINARY}} -gen-config > rendered/config.yaml
+      - HOME={{.REMOTE_HOME}} go run ./cmd/gha-runner-controller -gen-config > rendered/config.yaml
     generates:
       - rendered/{{.LABEL}}.plist
       - rendered/config.yaml
