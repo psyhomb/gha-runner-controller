@@ -1,19 +1,25 @@
 version: '3'
 
-# Host/user-specific values - override from the command line via env vars,
-# e.g. REMOTE_HOST=myhost REMOTE_USER=ci task install
+# Host/user-specific values - local mode by default; pass REMOTE_HOST to
+# target a remote host, e.g. REMOTE_HOST=myhost task install
 vars:
   REMOTE_USER:
-    sh: echo "${REMOTE_USER:-admin}"
+    sh: echo "${REMOTE_USER:-$(id -un)}" # default: the local user
   REMOTE_HOST:
-    sh: echo "${REMOTE_HOST:-WMAC-05147}"
+    sh: echo "${REMOTE_HOST}" # default: empty = local mode
+  RUN: # remote shell wrapper; eval unwraps the quoted command locally
+    sh: '[ -n "{{.REMOTE_HOST}}" ] && echo "ssh -t {{.REMOTE_USER}}@{{.REMOTE_HOST}}" || echo eval'
+  CP:
+    sh: '[ -n "{{.REMOTE_HOST}}" ] && echo scp || echo cp'
+  RPREFIX: # scp target prefix, empty when local
+    sh: '[ -n "{{.REMOTE_HOST}}" ] && echo "{{.REMOTE_USER}}@{{.REMOTE_HOST}}:" || printf ""'
 
   BINARY: gha-runner-controller
   VERSION:
     sh: echo "${VERSION:-$(git rev-parse --short HEAD)}"
   LABEL: local.gha-runner-controller
-  REMOTE: '{{.REMOTE_USER}}@{{.REMOTE_HOST}}'
-  REMOTE_HOME: /Users/{{.REMOTE_USER}}
+  REMOTE_HOME:
+    sh: '[ -n "{{.REMOTE_HOST}}" ] && echo "/Users/{{.REMOTE_USER}}" || echo "$HOME"'
   REMOTE_BIN: '{{.REMOTE_HOME}}/bin'
   REMOTE_CONFIG_DIR: '{{.REMOTE_HOME}}/.config/gha-runner-controller'
   LOG_DIR: '{{.REMOTE_HOME}}/Library/Logs/gha-runner-controller'
@@ -70,41 +76,41 @@ tasks:
       - rm -f {{.BINARY}}
 
   deploy:
-    desc: Build and copy the binary to the remote host
+    desc: Build and copy the binary to the target host (local default, REMOTE_HOST=host for remote)
     deps: [build]
     cmds:
-      - scp {{.BINARY}} {{.REMOTE}}:{{.REMOTE_BIN}}/
+      - '{{.CP}} {{.BINARY}} {{.RPREFIX}}{{.REMOTE_BIN}}/'
 
   restart:
-    desc: Restart the daemon on the remote host
+    desc: Restart the daemon on the target host (local default, REMOTE_HOST=host for remote)
     cmds:
-      - ssh -t {{.REMOTE}} "sudo launchctl kickstart -k system/{{.LABEL}}"
+      - '{{.RUN}} "sudo launchctl kickstart -k system/{{.LABEL}}"'
 
   deploy-plist:
-    desc: Redeploy the plist and reload the daemon
+    desc: Redeploy the plist and reload the daemon (local default, REMOTE_HOST=host for remote)
     deps: [render]
     cmds:
-      - scp rendered/{{.LABEL}}.plist {{.REMOTE}}:/tmp/
-      - ssh -t {{.REMOTE}} "sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist && (sudo launchctl bootout system/{{.LABEL}} || true) && sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"
+      - '{{.CP}} rendered/{{.LABEL}}.plist {{.RPREFIX}}/tmp/'
+      - '{{.RUN}} "sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist && (sudo launchctl bootout system/{{.LABEL}} || true) && sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"'
 
   stop:
-    desc: Stop the daemon on the remote host (in-flight ephemeral VMs are stopped+deleted; daemon returns at next boot)
+    desc: Stop the daemon on the target host (local default, REMOTE_HOST=host for remote; in-flight ephemeral VMs are stopped+deleted; daemon returns at next boot)
     cmds:
-      - ssh -t {{.REMOTE}} "sudo launchctl bootout system/{{.LABEL}}"
+      - '{{.RUN}} "sudo launchctl bootout system/{{.LABEL}}"'
 
   start:
-    desc: Start the daemon on the remote host (bootstrap requires the plist path, not the label)
+    desc: Start the daemon on the target host (local default, REMOTE_HOST=host for remote; bootstrap requires the plist path, not the label)
     cmds:
-      - ssh -t {{.REMOTE}} "sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"
+      - '{{.RUN}} "sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"'
 
   update:
-    desc: Build, deploy and restart the daemon (one command)
+    desc: Build, deploy and restart the daemon (local default, REMOTE_HOST=host for remote; one command)
     deps: [deploy]
     cmds:
       - task: restart
 
   render:
-    desc: Render plist + config templates with the configured user/home
+    desc: Render plist + config templates with the target user/home (local user/home unless REMOTE_HOST is set)
     deps: [build]
     cmds:
       - mkdir -p rendered
@@ -116,33 +122,33 @@ tasks:
       - rendered/config.yaml
 
   install:
-    desc: One-time remote install (binary + plist + config if missing; does NOT start the daemon - use 'task start')
+    desc: One-time install on the target host (local default, REMOTE_HOST=host for remote; binary + plist + config if missing; does NOT start the daemon - use 'task start')
     deps: [deploy, render]
     cmds:
-      - scp rendered/{{.LABEL}}.plist rendered/config.yaml {{.REMOTE}}:/tmp/
-      - sh -c 'test -f app.pem && scp app.pem {{.REMOTE}}:/tmp/ || true'
-      - ssh -t {{.REMOTE}} "mkdir -p {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}} && (test -f {{.REMOTE_CONFIG_DIR}}/config.yaml || cp /tmp/config.yaml {{.REMOTE_CONFIG_DIR}}/config.yaml) && chmod 600 {{.REMOTE_CONFIG_DIR}}/config.yaml && rm -f /tmp/config.yaml && (test ! -f /tmp/app.pem || (mv /tmp/app.pem {{.REMOTE_CONFIG_DIR}}/app.pem && chmod 600 {{.REMOTE_CONFIG_DIR}}/app.pem)) && sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist"
+      - '{{.CP}} rendered/{{.LABEL}}.plist rendered/config.yaml {{.RPREFIX}}/tmp/'
+      - sh -c 'test -f app.pem && {{.CP}} app.pem {{.RPREFIX}}/tmp/ || true'
+      - '{{.RUN}} "mkdir -p {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}} && (test -f {{.REMOTE_CONFIG_DIR}}/config.yaml || cp /tmp/config.yaml {{.REMOTE_CONFIG_DIR}}/config.yaml) && chmod 600 {{.REMOTE_CONFIG_DIR}}/config.yaml && rm -f /tmp/config.yaml && (test ! -f /tmp/app.pem || (mv /tmp/app.pem {{.REMOTE_CONFIG_DIR}}/app.pem && chmod 600 {{.REMOTE_CONFIG_DIR}}/app.pem)) && sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist"'
       - sh -c 'test -f app.pem || echo "NOTE - place the GitHub App PEM at {{.REMOTE_CONFIG_DIR}}/app.pem (chmod 600); edit config.yaml (github.org/appID/installationID)"'
       - echo "NOTE - daemon installed but NOT started; run 'task start' when ready"
 
   uninstall:
-    desc: Remove the daemon, plist and binary from the remote host (config+logs kept unless PURGE=yes)
+    desc: Remove the daemon, plist and binary from the target host (local default, REMOTE_HOST=host for remote; config+logs kept unless PURGE=yes)
     cmds:
-      - ssh -t {{.REMOTE}} "(sudo launchctl bootout system/{{.LABEL}} || true) && sudo rm -f /Library/LaunchDaemons/{{.LABEL}}.plist && rm -f {{.REMOTE_BIN}}/{{.BINARY}}"
-      - sh -c 'if [ "${PURGE:-no}" = "yes" ]; then ssh {{.REMOTE}} "rm -rf {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}}"; else echo "NOTE - config and logs kept on the remote ({{.REMOTE_CONFIG_DIR}}, {{.LOG_DIR}}); run PURGE=yes task uninstall to remove them too"; fi'
+      - '{{.RUN}} "(sudo launchctl bootout system/{{.LABEL}} || true) && sudo rm -f /Library/LaunchDaemons/{{.LABEL}}.plist && rm -f {{.REMOTE_BIN}}/{{.BINARY}}"'
+      - sh -c 'if [ "${PURGE:-no}" = "yes" ]; then {{.RUN}} "rm -rf {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}}"; else echo "NOTE - config and logs kept on the target ({{.REMOTE_CONFIG_DIR}}, {{.LOG_DIR}}); run PURGE=yes task uninstall to remove them too"; fi'
       - rm -rf rendered
 
   status:
-    desc: Show daemon state on the remote host
+    desc: Show daemon state on the target host (local default, REMOTE_HOST=host for remote)
     cmds:
-      - ssh -t {{.REMOTE}} "sudo launchctl print system/{{.LABEL}} | grep -E 'state|last exit' || true"
+      - '{{.RUN}} "sudo launchctl print system/{{.LABEL}} | grep -E ''state|last exit'' || true"'
 
   host-setup:
-    desc: One-time host prep - passwordless sudo for launchctl (prompts for the sudo password once)
+    desc: One-time host prep - passwordless sudo for launchctl (local default, REMOTE_HOST=host for remote; prompts for the sudo password once)
     cmds:
-      - 'ssh -t {{.REMOTE}} "echo ''{{.REMOTE_USER}} ALL=(ALL) NOPASSWD: /bin/launchctl'' | sudo tee /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo chmod 440 /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo visudo -cf /etc/sudoers.d/{{.REMOTE_USER}}-launchctl"'
+      - '{{.RUN}} "echo ''{{.REMOTE_USER}} ALL=(ALL) NOPASSWD: /bin/launchctl'' | sudo tee /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo chmod 440 /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo visudo -cf /etc/sudoers.d/{{.REMOTE_USER}}-launchctl"'
 
   logs:
-    desc: Tail controller logs on the remote host (Ctrl+C to stop)
+    desc: Tail controller logs on the target host (local default, REMOTE_HOST=host for remote; Ctrl+C to stop)
     cmds:
-      - ssh {{.REMOTE}} "tail -f {{.LOG_DIR}}/gha-runner-controller.out.log {{.LOG_DIR}}/gha-runner-controller.err.log"
+      - '{{.RUN}} "tail -f {{.LOG_DIR}}/gha-runner-controller.out.log {{.LOG_DIR}}/gha-runner-controller.err.log"'

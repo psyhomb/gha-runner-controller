@@ -112,20 +112,25 @@ PATH - `~/.zprofile` on macOS (Homebrew), `~/.profile` on Linux.
 
 ### 3. Controller install
 
-Host prerequisites (one-time):
+Host prerequisites (one-time; optional locally - sudo will just prompt):
 
 ```bash
-ssh-copy-id {{REMOTE_USER}}@{{REMOTE_HOST}}   # key auth, no more SSH password prompts
-task host-setup                               # passwordless sudo for launchctl (prompts once)
+task host-setup   # passwordless sudo for launchctl (prompts for the sudo password once)
 ```
 
-From the project directory on your Mac (renders the plist template in
-`deploy/` and the embedded config template for the remote host; override
-`REMOTE_USER`/`REMOTE_HOST` via env vars):
+Local install (on the tart host itself - the default; templates render with
+the local user and home):
 
 ```bash
 task install    # builds, deploys binary, renders + installs plist and config (if missing);
                 # does NOT start the daemon - use 'task start' when ready
+```
+
+Remote install (from your dev machine to another tart host):
+
+```bash
+ssh-copy-id admin@myhost        # key auth, no more SSH password prompts
+REMOTE_HOST=myhost task install # REMOTE_USER defaults to the local user; override if needed
 ```
 
 If `app.pem` (the GitHub App private key) is present in the project
@@ -205,10 +210,10 @@ sudo chmod 644 /Library/LaunchDaemons/local.gha-runner-controller.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/local.gha-runner-controller.plist
 ```
 
-From your dev machine, `task install` does the equivalent over SSH (binary +
-plist + config onto the remote host) but deliberately does NOT start the
-daemon - run `task start` when ready. To redeploy just the plist later:
-`task deploy-plist`.
+For another tart host, pass `REMOTE_HOST` to any task:
+`REMOTE_HOST=myhost task install` does the equivalent over SSH (binary +
+plist + config) but deliberately does NOT start the daemon - run `task
+start` when ready. To redeploy just the plist later: `task deploy-plist`.
 
 Logs: `~/Library/Logs/gha-runner-controller/gha-runner-controller.{out,err}.log`.
 
