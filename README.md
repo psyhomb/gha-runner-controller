@@ -131,17 +131,19 @@ Manual equivalent (on the tart host):
 mkdir -p ~/bin ~/.config/gha-runner-controller
 cp gha-runner-controller ~/bin/
 cp app.pem ~/.config/gha-runner-controller/ && chmod 600 ~/.config/gha-runner-controller/app.pem
-# render the config template (it contains __REMOTE_HOME__ placeholders):
-sed "s|__REMOTE_HOME__|$HOME|g" deploy/config.example.yaml > ~/.config/gha-runner-controller/config.yaml
+# generate the config template (it documents every parameter inline;
+# __HOME__ placeholders are substituted with your home directory):
+./gha-runner-controller -gen-config > ~/.config/gha-runner-controller/config.yaml
 chmod 600 ~/.config/gha-runner-controller/config.yaml
 # edit config.yaml: github.org, github.appID, github.installationID
 ```
 
 ## Configuration (config.yaml)
 
-`deploy/config.example.yaml` documents **every parameter inline** (detailed
-comments, defaults, gotchas) - it is the reference. Unknown keys are
-rejected at startup, so stale or misspelled keys fail loudly. Quick map:
+`internal/config/config.template.yaml` documents **every parameter inline**
+(detailed comments, defaults, gotchas) - it is the reference, embedded in the
+binary and printed via `-gen-config`. Unknown keys are rejected at startup,
+so stale or misspelled keys fail loudly. Quick map:
 
 | Key | Meaning | Default |
 |---|---|---|

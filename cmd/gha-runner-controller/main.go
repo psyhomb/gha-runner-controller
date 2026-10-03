@@ -37,10 +37,20 @@ func parseLevel(s string) slog.Level {
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to YAML config file")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	genConfig := flag.Bool("gen-config", false, "print default config to stdout and exit")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println(version)
+		return
+	}
+	if *genConfig {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cannot determine home directory: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(config.Default(home))
 		return
 	}
 

@@ -25,7 +25,7 @@ github:
   appID: 1111111
   installationID: 111111111
   # Path to the App's private key (PEM). Keep it chmod 600.
-  keyPath: __REMOTE_HOME__/.config/gha-runner-controller/app.pem
+  keyPath: __HOME__/.config/gha-runner-controller/app.pem
 
 # Runner registration - what the runner looks like to GitHub.
 runner:
@@ -81,7 +81,7 @@ vm:
     # Guest SSH user. Default: admin.
     user: admin
     # Controller's SSH private key used to reach guests. Required.
-    privateKeyPath: __REMOTE_HOME__/.ssh/gha-runner-controller
+    privateKeyPath: __HOME__/.ssh/gha-runner-controller
 
 # Job demand and the scaling loop. Discovery is always the broker: an HTTPS
 # long-poll session on the runner scale set (the internal API ARC uses) -

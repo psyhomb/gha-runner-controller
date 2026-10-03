@@ -96,3 +96,18 @@ func TestLoadConfigRequiredFields(t *testing.T) {
 		t.Errorf("missing scaleSetName should be rejected, got %v", err)
 	}
 }
+
+func TestDefaultTemplate(t *testing.T) {
+	out := Default("/home/test")
+	if strings.Contains(out, "__HOME__") {
+		t.Error("Default() left __HOME__ placeholders unsubstituted")
+	}
+	if !strings.Contains(out, "/home/test/.config/gha-runner-controller/app.pem") ||
+		!strings.Contains(out, "/home/test/.ssh/gha-runner-controller") {
+		t.Error("Default() did not substitute home into paths")
+	}
+	// the template must always stay loadable against the schema
+	if _, err := LoadConfig(writeConfig(t, out)); err != nil {
+		t.Errorf("generated template should pass LoadConfig, got %v", err)
+	}
+}
