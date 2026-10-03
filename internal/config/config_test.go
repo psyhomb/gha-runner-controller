@@ -26,7 +26,7 @@ func TestVMNameBase(t *testing.T) {
 func TestEffectiveLabels(t *testing.T) {
 	c := Config{}
 	c.Jobs.Broker.ScaleSetName = "my-scale-set"
-	c.Runner.Labels = []string{"self-hosted", "tart-eph"}
+	c.Runner.Labels = []string{"self-hosted", "macOS"}
 	got := c.EffectiveLabels()
 	if len(got) != 3 || got[2] != "my-scale-set" {
 		t.Errorf("labels = %v, want scale set name appended", got)
