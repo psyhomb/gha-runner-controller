@@ -200,7 +200,7 @@ sudo launchctl bootout system/local.gha-runner-controller        # stop
 ```yaml
 jobs:
   build:
-    runs-on: [self-hosted, tart-eph]
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - run: uname -a
 ```

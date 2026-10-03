@@ -34,7 +34,7 @@ func TestParseJobMessages(t *testing.T) {
 			"jobId":           "uuid-1",
 			"jobDisplayName":  "smoke-test",
 			"workflowRunId":   456,
-			"requestLabels":   []string{"self-hosted", "macOS", "tart-eph"},
+			"requestLabels":   []string{"self-hosted", "macOS", "ARM64"},
 		},
 		{
 			"messageType": "JobCompleted",
