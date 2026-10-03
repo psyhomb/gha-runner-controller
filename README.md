@@ -25,7 +25,7 @@ GitHub org
 gha-runner-controller (LaunchDaemon on the tart host)
    │  scales VMs toward min(vm.minRunners + jobs in flight, vm.maxRunners),
    │  driven by the broker statistics (no client-side job bookkeeping):
-   │    1. tart clone <baseImage> <nameBase>-<seq>-<ts>   # nameBase = vm.namePrefix or the scale set name
+   │    1. tart clone <baseImage> <nameBase>-<unixts-ns>   # nameBase = vm.namePrefix or the scale set name
    │    2. tart run <name> --no-graphics
    │    3. tart ip --wait 60 + wait for SSH
    │    4. generate scale-set JIT config
@@ -156,7 +156,7 @@ so stale or misspelled keys fail loudly. Quick map:
 | `runner.workDir` | runner work dir in guest | `_work` |
 | `vm.baseImage` | tart image to clone from | (required) |
 | `vm.cpu` / `vm.memoryMB` | per-VM resources (0 = image default) | 0 |
-| `vm.namePrefix` | VM/runner name base (`<base>-<seq>-<ts>`); also the orphan-cleanup namespace; empty = the scale set name | `` (scale set name) |
+| `vm.namePrefix` | VM/runner name base (`<base>-<unixts-ns>`); also the orphan-cleanup namespace; empty = the scale set name | `` (scale set name) |
 | `vm.minRunners` | minimum idle runners kept registered (ARC `minRunners`; 0 = pure on-demand); counts toward maxRunners | 0 |
 | `vm.maxRunners` | hard cap on total VMs (busy + idle + booting) | 2 |
 | `vm.ttlMinutes` | force-delete VMs busy longer than this (stuck job) | 90 |
@@ -269,7 +269,7 @@ statistics snapshot (assigned includes running).
 - Boot-failure backoff: repeated VM boot failures pause scale-up (the demand
   signal does not decay on its own); a successful registration resets it.
 
-VM names are uniform - `<nameBase>-<seq>-<ts>`, where nameBase is
+VM names are uniform - `<nameBase>-<unixts-ns>`, where nameBase is
 `vm.namePrefix` or, when empty, the scale set name - there is no
 warm/on-demand distinction.
 

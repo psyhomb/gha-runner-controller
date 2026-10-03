@@ -54,7 +54,7 @@ vm:
   cpu: 0
   memoryMB: 0
 
-  # VM/runner name base: VMs are named <base>-<seq>-<unixts>. When empty,
+  # VM/runner name base: VMs are named <base>-<unixts-ns>. When empty,
   # the scale set name is used as the base. The base is also the orphan
   # cleanup namespace (startup deletes all VMs named <base>-*), so keep it
   # unique per controller/host. Default: empty (= the scale set name).
