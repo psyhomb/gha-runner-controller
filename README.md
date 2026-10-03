@@ -15,6 +15,8 @@ in-process SSH (`x/crypto/ssh`) - no system ssh binary, no known_hosts.
 
 ## Architecture
 
+<img width="1008" height="1058" alt="gha-runner-controller-architecture" src="https://github.com/user-attachments/assets/dd6bd756-88b4-4d49-b7eb-c480151c4dc2" />
+
 ```
 GitHub org
    │  broker: HTTPS long-poll session on the runner scale set (the internal
