@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -17,6 +18,8 @@ import (
 	"gha-runner-controller/internal/jobsource"
 	"gha-runner-controller/internal/vm"
 )
+
+var version = "dev" // overridden at build: -ldflags "-X main.version=1.2.3"
 
 func parseLevel(s string) slog.Level {
 	switch strings.ToLower(s) {
@@ -33,7 +36,13 @@ func parseLevel(s string) slog.Level {
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to YAML config file")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	var levelVar slog.LevelVar
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: &levelVar})))
