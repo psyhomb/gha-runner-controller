@@ -113,8 +113,9 @@ ssh-copy-id {{REMOTE_USER}}@{{REMOTE_HOST}}   # key auth, no more SSH password p
 task host-setup                               # passwordless sudo for launchctl (prompts once)
 ```
 
-From the project directory on your Mac (renders the templates in `config/`
-and `deploy/` with the `REMOTE_USER` from `taskfile.yaml`):
+From the project directory on your Mac (renders the plist template in
+`deploy/` and the embedded config template for the remote host; override
+`REMOTE_USER`/`REMOTE_HOST` via env vars):
 
 ```bash
 task install    # builds, deploys binary, renders + installs plist and config (if missing);
@@ -123,7 +124,7 @@ task install    # builds, deploys binary, renders + installs plist and config (i
 
 If `app.pem` (the GitHub App private key) is present in the project
 directory, it is deployed automatically with mode 600; otherwise place it
-manually on the host. Note: `*.pem` is git-ignored - never commit the key.
+manually on the host. **Note:** `*.pem` is git-ignored - never commit the key.
 
 Manual equivalent (on the tart host):
 
@@ -169,7 +170,7 @@ so stale or misspelled keys fail loudly. Quick map:
 ## Run as a service (LaunchDaemon)
 
 The plist in `deploy/` is a template (`__REMOTE_USER__` / `__REMOTE_HOME__`
-placeholders) - install it rendered, same pattern as the tart VM daemon:
+placeholders). On the tart host itself:
 
 ```bash
 task render   # writes rendered/local.gha-runner-controller.plist
@@ -179,14 +180,17 @@ sudo chmod 644 /Library/LaunchDaemons/local.gha-runner-controller.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/local.gha-runner-controller.plist
 ```
 
-(or just `task install`, which does all of the above)
+From your dev machine, `task install` does the equivalent over SSH (binary +
+plist + config onto the remote host) but deliberately does NOT start the
+daemon - run `task start` when ready. To redeploy just the plist later:
+`task deploy-plist`.
 
 Logs: `~/Library/Logs/gha-runner-controller/gha-runner-controller.{out,err}.log`.
 
-Note: the controller runs `tart` commands, which need the unlocked
-`login.keychain` of user admin (see the main README). After a host reboot it
-becomes effective once admin logs in via SSH and unlocks the keychain; until
-then its retries fail harmlessly.
+**Note:** `tart` needs the unlocked login keychain of user admin. After a
+host reboot the controller's tart calls fail until admin logs in once via
+SSH; the boot-failure backoff absorbs this, so retries resume automatically
+after the first login.
 
 Manage:
 
