@@ -1,10 +1,12 @@
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/ea8f1ea3-feaf-4351-b86a-cb742e06b8c3"><source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/ea8f1ea3-feaf-4351-b86a-cb742e06b8c3"><img width="256" height="256" alt="gha-runner-controller-logo" src="https://github.com/user-attachments/assets/ea8f1ea3-feaf-4351-b86a-cb742e06b8c3"></picture></p>
+
 # gha-runner-controller
 
 Ephemeral **macOS** GitHub Actions runners on [tart](https://github.com/openai/tart) VMs
-(Apple Silicon hosts, macOS guests).
+(macOS on Apple Silicon hosts, macOS or Linux guests).
 
 Listens to an org's **runner scale set** over GitHub's actions-service
-long-poll (the internal API ARC uses), and for each job routed to the set:
+long-poll API, and for each job routed to the set:
 clones a fresh macOS VM from a base image, boots it, registers an
 **ephemeral** runner into the scale set via GitHub's JIT API, lets the job
 run, then stops and deletes the VM. One job = one fresh VM, always.
@@ -15,12 +17,12 @@ in-process SSH (`x/crypto/ssh`) - no system ssh binary, no known_hosts.
 
 ## Architecture
 
-<img width="1008" height="1058" alt="gha-runner-controller-architecture" src="https://github.com/user-attachments/assets/dd6bd756-88b4-4d49-b7eb-c480151c4dc2" />
+<img width="1008" height="1058" alt="gha-runner-controller-architecture-diagram" src="https://github.com/user-attachments/assets/69ffe11e-cfe2-45a7-afed-07cea6739162" />
 
 ```
 GitHub org
-   │  broker: HTTPS long-poll session on the runner scale set (the internal
-   │  API ARC uses): job events + a statistics snapshot on every batch
+   │  broker: HTTPS long-poll session on the runner scale set (GitHub's
+   │  internal API): job events + a statistics snapshot on every batch
    ▼
 gha-runner-controller (LaunchDaemon on the tart host)
    │  scales VMs toward min(vm.minRunners + jobs in flight, vm.maxRunners),
@@ -39,7 +41,7 @@ tart VMs (baseImage clones)
 Job demand comes from `BrokerSource` (`internal/jobsource`): a long-poll
 session on the runner scale set. Scaling is statistics-driven - every message
 batch (and session creation) carries a server-side snapshot of job/runner
-counts, so there is no client-side job state to go stale (ARC's model).
+counts, so there is no client-side job state to go stale.
 
 Runner registration never exposes the JIT credential in a process argument
 list: the controller decodes the JIT bundle (which is just the runner's
@@ -188,7 +190,7 @@ so stale or misspelled keys fail loudly. Quick map:
 | `vm.baseImage` | tart image to clone from | (required) |
 | `vm.cpu` / `vm.memoryMB` | per-VM resources (0 = image default) | 0 |
 | `vm.namePrefix` | VM/runner name base (`<base>-<unixts-ns>`); also the orphan-cleanup namespace; empty = the scale set name | `` (scale set name) |
-| `vm.minRunners` | minimum idle runners kept registered (ARC `minRunners`; 0 = pure on-demand); counts toward maxRunners | 0 |
+| `vm.minRunners` | minimum idle runners kept registered (0 = pure on-demand); counts toward maxRunners | 0 |
 | `vm.maxRunners` | hard cap on total VMs (busy + idle + booting) | 2 |
 | `vm.ttlMinutes` | force-delete VMs busy longer than this (stuck job) | 90 |
 | `vm.ssh.user` | guest SSH user | `admin` |
@@ -279,8 +281,8 @@ other projects, and Go enforces that.
 
 ## Scaling (`vm.minRunners` and `vm.maxRunners`)
 
-The controller follows ARC's minRunners/maxRunners semantics (ADR
-2023-11-02): all VMs are fungible - any VM can serve any job routed to the
+The controller follows minRunners/maxRunners semantics: all VMs are
+fungible - any VM can serve any job routed to the
 scale set - and every tick the controller scales the total VM count toward
 
     desired = min(vm.minRunners + jobsInFlight, vm.maxRunners)
@@ -312,18 +314,15 @@ runner plus capacity for one more VM; two concurrent jobs run in parallel
 (one on the idle runner, one on a fresh VM), and the idle baseline is
 refilled as jobs consume it.
 
-For ARC users: `vm.minRunners` IS ARC's `minRunners` and `vm.maxRunners` IS
-`maxRunners` - same formula, same semantics, VM instead of pod granularity.
-
 ## How jobs flow (broker long-poll)
 
-The controller opens a long-poll session against GitHub's actions service
-(the internal API ARC uses) on a runner scale set and receives
+The controller opens a long-poll session against GitHub's internal
+actions-service API on a runner scale set and receives
 `JobAvailable`/`JobAssigned`/`JobStarted`/`JobCompleted` events in near-real
 time (~1-2 s). There is no per-repo REST polling at all, so API rate limits
 are a non-issue at any org size.
 
-- **Scaling is statistics-driven** (ARC's model): every message batch carries
+- **Scaling is statistics-driven**: every message batch carries
   a server-side snapshot (`TotalAvailableJobs`, `TotalAssignedJobs`,
   `TotalRunningJobs`, runner counts) and session creation returns the same
   snapshot - so a (re)started controller converges immediately without event
@@ -355,7 +354,7 @@ are a non-issue at any org size.
     the only runner was busy and waited for the next registration.
   - **Available path (scale-from-zero):** with no registered runners, the job
     arrives as `JobAvailable` and must be claimed via `AcquireJobs` (an
-    unacquired job stays unassigned forever, per the ARC listener contract),
+    unacquired job stays unassigned forever),
     then a VM is provisioned.
   - Either way: provision VM -> runner registers **into the scale set** via
     the scale-set JIT endpoint -> job runs -> runner self-deregisters -> VM
