@@ -2,6 +2,7 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -10,9 +11,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is loaded from a YAML file (see deploy/config.example.yaml, which
-// documents every parameter inline). Unknown keys are rejected, so stale or
-// misspelled keys fail at startup instead of being silently ignored.
+//go:embed config.template.yaml
+var configTemplate string
+
+// Default returns the default config template (every parameter documented
+// inline) with __HOME__ substituted for home.
+func Default(home string) string {
+	return strings.ReplaceAll(configTemplate, "__HOME__", home)
+}
+
+// Config is loaded from a YAML file (see config.template.yaml, printed via
+// -gen-config, which documents every parameter inline). Unknown keys are
+// rejected, so stale or misspelled keys fail at startup instead of being
+// silently ignored.
 type Config struct {
 	LogLevel string       `yaml:"logLevel"`
 	GitHub   GitHubConfig `yaml:"github"`
