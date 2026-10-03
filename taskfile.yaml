@@ -1,0 +1,145 @@
+version: '3'
+
+# Host/user-specific values - override from the command line via env vars,
+# e.g. REMOTE_HOST=myhost REMOTE_USER=ci task install
+vars:
+  REMOTE_USER:
+    sh: echo "${REMOTE_USER:-admin}"
+  REMOTE_HOST:
+    sh: echo "${REMOTE_HOST:-WMAC-05147}"
+
+  BINARY: gha-runner-controller
+  LABEL: local.gha-runner-controller
+  REMOTE: '{{.REMOTE_USER}}@{{.REMOTE_HOST}}'
+  REMOTE_HOME: /Users/{{.REMOTE_USER}}
+  REMOTE_BIN: '{{.REMOTE_HOME}}/bin'
+  REMOTE_CONFIG_DIR: '{{.REMOTE_HOME}}/.config/gha-runner-controller'
+  LOG_DIR: '{{.REMOTE_HOME}}/Library/Logs/gha-runner-controller'
+
+tasks:
+  default:
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the controller binary (always builds; Go's own cache keeps it fast)
+    cmds:
+      - go build -trimpath -buildvcs=false -ldflags="-s -w" -o {{.BINARY}} ./cmd/gha-runner-controller
+
+  check:
+    desc: gofmt check + go vet
+    cmds:
+      - test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - go vet ./...
+
+  fmt:
+    desc: Format code (gofmt -w)
+    cmds:
+      - gofmt -w .
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  upgrade-go-deps:
+    desc: Upgrade all Go dependencies to latest, then verify (vet + tests)
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+      - go vet ./...
+      - go test ./...
+
+  upgrade-go:
+    desc: "Bump the go directive in go.mod - task upgrade-go GO_VERSION=1.24.2 (default: latest) - then verify"
+    vars:
+      GO_VERSION: '{{.GO_VERSION | default "latest"}}'
+    cmds:
+      - silent: true
+        cmd: echo "current go=$(grep '^go ' go.mod | cut -d' ' -f2) toolchain=$(go env GOVERSION)"
+      - go get go@{{.GO_VERSION}}
+      - go mod tidy
+      - go vet ./...
+      - go test ./...
+
+  clean:
+    desc: Remove the built binary
+    cmds:
+      - rm -f {{.BINARY}}
+
+  deploy:
+    desc: Build and copy the binary to the remote host
+    deps: [build]
+    cmds:
+      - scp {{.BINARY}} {{.REMOTE}}:{{.REMOTE_BIN}}/
+
+  restart:
+    desc: Restart the daemon on the remote host
+    cmds:
+      - ssh -t {{.REMOTE}} "sudo launchctl kickstart -k system/{{.LABEL}}"
+
+  deploy-plist:
+    desc: Redeploy the plist and reload the daemon
+    deps: [render]
+    cmds:
+      - scp rendered/{{.LABEL}}.plist {{.REMOTE}}:/tmp/
+      - ssh -t {{.REMOTE}} "sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist && (sudo launchctl bootout system/{{.LABEL}} || true) && sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"
+
+  stop:
+    desc: Stop the daemon on the remote host (in-flight ephemeral VMs are stopped+deleted; daemon returns at next boot)
+    cmds:
+      - ssh -t {{.REMOTE}} "sudo launchctl bootout system/{{.LABEL}}"
+
+  start:
+    desc: Start the daemon on the remote host (bootstrap requires the plist path, not the label)
+    cmds:
+      - ssh -t {{.REMOTE}} "sudo launchctl bootstrap system /Library/LaunchDaemons/{{.LABEL}}.plist"
+
+  update:
+    desc: Build, deploy and restart the daemon (one command)
+    deps: [deploy]
+    cmds:
+      - task: restart
+
+  render:
+    desc: Render plist + config templates with the configured user/home
+    cmds:
+      - mkdir -p rendered
+      - sed -e 's|__REMOTE_USER__|{{.REMOTE_USER}}|g' -e 's|__REMOTE_HOME__|{{.REMOTE_HOME}}|g' deploy/local.gha-runner-controller.plist > rendered/{{.LABEL}}.plist
+      - plutil -lint rendered/{{.LABEL}}.plist
+      - sed -e 's|__REMOTE_HOME__|{{.REMOTE_HOME}}|g' deploy/config.example.yaml > rendered/config.yaml
+    generates:
+      - rendered/{{.LABEL}}.plist
+      - rendered/config.yaml
+
+  install:
+    desc: One-time remote install (binary + plist + config if missing; does NOT start the daemon - use 'task start')
+    deps: [deploy, render]
+    cmds:
+      - scp rendered/{{.LABEL}}.plist rendered/config.yaml {{.REMOTE}}:/tmp/
+      - sh -c 'test -f app.pem && scp app.pem {{.REMOTE}}:/tmp/ || true'
+      - ssh -t {{.REMOTE}} "mkdir -p {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}} && (test -f {{.REMOTE_CONFIG_DIR}}/config.yaml || cp /tmp/config.yaml {{.REMOTE_CONFIG_DIR}}/config.yaml) && chmod 600 {{.REMOTE_CONFIG_DIR}}/config.yaml && rm -f /tmp/config.yaml && (test ! -f /tmp/app.pem || (mv /tmp/app.pem {{.REMOTE_CONFIG_DIR}}/app.pem && chmod 600 {{.REMOTE_CONFIG_DIR}}/app.pem)) && sudo mv /tmp/{{.LABEL}}.plist /Library/LaunchDaemons/ && sudo chown root:wheel /Library/LaunchDaemons/{{.LABEL}}.plist && sudo chmod 644 /Library/LaunchDaemons/{{.LABEL}}.plist"
+      - sh -c 'test -f app.pem || echo "NOTE - place the GitHub App PEM at {{.REMOTE_CONFIG_DIR}}/app.pem (chmod 600); edit config.yaml (github.org/appID/installationID)"'
+      - echo "NOTE - daemon installed but NOT started; run 'task start' when ready"
+
+  uninstall:
+    desc: Remove the daemon, plist and binary from the remote host (config+logs kept unless PURGE=yes)
+    cmds:
+      - ssh -t {{.REMOTE}} "(sudo launchctl bootout system/{{.LABEL}} || true) && sudo rm -f /Library/LaunchDaemons/{{.LABEL}}.plist && rm -f {{.REMOTE_BIN}}/{{.BINARY}}"
+      - sh -c 'if [ "${PURGE:-no}" = "yes" ]; then ssh {{.REMOTE}} "rm -rf {{.REMOTE_CONFIG_DIR}} {{.LOG_DIR}}"; else echo "NOTE - config and logs kept on the remote ({{.REMOTE_CONFIG_DIR}}, {{.LOG_DIR}}); run PURGE=yes task uninstall to remove them too"; fi'
+      - rm -rf rendered
+
+  status:
+    desc: Show daemon state on the remote host
+    cmds:
+      - ssh -t {{.REMOTE}} "sudo launchctl print system/{{.LABEL}} | grep -E 'state|last exit' || true"
+
+  host-setup:
+    desc: One-time host prep - passwordless sudo for launchctl (prompts for the sudo password once)
+    cmds:
+      - 'ssh -t {{.REMOTE}} "echo ''{{.REMOTE_USER}} ALL=(ALL) NOPASSWD: /bin/launchctl'' | sudo tee /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo chmod 440 /etc/sudoers.d/{{.REMOTE_USER}}-launchctl && sudo visudo -cf /etc/sudoers.d/{{.REMOTE_USER}}-launchctl"'
+
+  logs:
+    desc: Tail controller logs on the remote host (Ctrl+C to stop)
+    cmds:
+      - ssh {{.REMOTE}} "tail -f {{.LOG_DIR}}/gha-runner-controller.out.log {{.LOG_DIR}}/gha-runner-controller.err.log"

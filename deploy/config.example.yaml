@@ -1,0 +1,114 @@
+# gha-runner-controller configuration.
+#
+# Unknown keys are rejected at startup, so typos and stale keys fail loudly
+# instead of being silently ignored. Defaults noted below apply when the key
+# is omitted (or set to its zero value).
+
+# Log verbosity: debug (adds per-tick poll stats and broker internals), info,
+# warn, error. Default: info.
+logLevel: info
+
+# The GitHub connection: the account the runners serve, plus the App
+# credentials used to access it.
+github:
+  # Account that owns the runners: an organization name or a username
+  # (personal account). Required.
+  org: myorg
+
+  # Account topology. Only "org" is supported (runner scale sets are an org
+  # concept); empty = auto-detect via the API at startup (fails fast if the
+  # account is a personal account). Default: auto-detect.
+  scope: ""
+
+  # GitHub App credentials. The App needs Actions (read) and Self-hosted
+  # runners (read/write) permissions on the installation. All required.
+  appID: 1111111
+  installationID: 111111111
+  # Path to the App's private key (PEM). Keep it chmod 600.
+  keyPath: __REMOTE_HOME__/.config/gha-runner-controller/app.pem
+
+# Runner registration - what the runner looks like to GitHub.
+runner:
+  # The complete, exact label set of every runner (runners are started with
+  # --no-default-labels, so nothing is added implicitly). The scale set name
+  # is appended automatically. A job routes to the scale set when its runs-on
+  # labels are a subset of this set (the scale set name is the unique,
+  # precise-targeting label). Required (at least one).
+  labels: [self-hosted, macOS, ARM64, tahoe]
+
+  # Runner group the runners register into (org-level groups only). The group
+  # also pre-filters which repos may use these runners server-side.
+  # Default: 1 (the "Default" group).
+  groupID: 1
+
+  # Runner work folder inside the guest. Default: _work.
+  workDir: _work
+
+# The tart VM fleet - what to boot and how many.
+vm:
+  # Tart image to clone every VM from. The image must contain the runner
+  # binaries and the SSH user below. Required.
+  baseImage: macos-tahoe-xcode-base
+
+  # Per-VM CPU count / memory in MB. 0 = keep the image defaults.
+  cpu: 0
+  memoryMB: 0
+
+  # VM/runner name base: VMs are named <base>-<seq>-<unixts>. When empty,
+  # the scale set name is used as the base. The base is also the orphan
+  # cleanup namespace (startup deletes all VMs named <base>-*), so keep it
+  # unique per controller/host. Default: empty (= the scale set name).
+  namePrefix: mac-mini-1-ephemeral-vm
+
+  # Minimum number of IDLE runners kept registered at all times (ARC
+  # minRunners semantics): jobs start in seconds instead of waiting ~60-90 s
+  # for a VM to boot, and a replacement boots as soon as an idle runner is
+  # consumed. 0 = pure on-demand (scale from zero, back to zero).
+  # Must be <= maxRunners. Default: 0.
+  minRunners: 0
+
+  # Hard cap on the total number of VMs (busy + idle + booting)
+  # (ARC maxRunners semantics). Default: 2.
+  maxRunners: 2
+
+  # Force-delete a VM that stays BUSY longer than this (stuck-job backstop).
+  # Idle VMs have no TTL. Default: 90.
+  ttlMinutes: 90
+
+  # SSH access into guests (key auth; the public key must be installed in the
+  # base image).
+  ssh:
+    # Guest SSH user. Default: admin.
+    user: admin
+    # Controller's SSH private key used to reach guests. Required.
+    privateKeyPath: __REMOTE_HOME__/.ssh/gha-runner-controller
+
+# Job demand and the scaling loop. Discovery is always the broker: an HTTPS
+# long-poll session on the runner scale set (the internal API ARC uses) -
+# near-real-time, no per-repo REST polling, safe at any org size. Scaling is
+# driven by the scale-set statistics snapshot carried on every message batch
+# (the server is the source of truth); there is no client-side job tracking.
+jobs:
+  # Scaling-tick interval in seconds: how often the controller recomputes the
+  # desired VM count (and reaps idle/TTL-expired VMs). Default: 15.
+  tickSeconds: 15
+
+  # Broker settings (the long-poll session on the runner scale set).
+  broker:
+    # Runner scale set name. Required - no default. Workflows target it via
+    # runs-on: <scaleSetName> (or any subset of the scale set's labels); the
+    # name is unique per runner group and is appended to the runner labels
+    # automatically. When vm.namePrefix is empty, VMs are named after it.
+    scaleSetName: mac-mini-1-ephemeral-vm-scale-set-1
+
+    # Capacity advertised to the broker via X-ScaleSetMaxCapacity: gates how
+    # many jobs GitHub offers (JobAvailable) and allows to acquire - it does
+    # NOT limit provisioning (maxRunners does). Default: maxRunners + 1
+    # (one slot of slack so the job signal is never throttled while all VMs
+    # are busy).
+    capacity: 0
+
+# Which repositories may use these runners is controlled on the GitHub side:
+# the runner group's repo visibility. There is no controller-side allowlist -
+# one could only gate provisioning, not GitHub's direct assignment to
+# registered runners, so it would silently strand jobs (queued up to 24h).

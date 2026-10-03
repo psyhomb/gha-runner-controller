@@ -1,0 +1,4 @@
+.task/
+rendered/
+/gha-runner-controller
+*.pem

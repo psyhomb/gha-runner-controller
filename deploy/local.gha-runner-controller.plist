@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.gha-runner-controller</string>
+    <key>UserName</key>
+    <string>__REMOTE_USER__</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REMOTE_HOME__/bin/gha-runner-controller</string>
+        <string>-config</string>
+        <string>__REMOTE_HOME__/.config/gha-runner-controller/config.yaml</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ExitTimeOut</key>
+    <integer>60</integer>
+    <key>StandardOutPath</key>
+    <string>__REMOTE_HOME__/Library/Logs/gha-runner-controller/gha-runner-controller.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REMOTE_HOME__/Library/Logs/gha-runner-controller/gha-runner-controller.err.log</string>
+</dict>
+</plist>
