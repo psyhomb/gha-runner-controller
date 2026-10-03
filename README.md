@@ -1,6 +1,6 @@
 # gha-runner-controller
 
-Ephemeral **macOS** GitHub Actions runners on [tart](https://tart.run) VMs
+Ephemeral **macOS** GitHub Actions runners on [tart](https://github.com/openai/tart) VMs
 (Apple Silicon hosts, macOS guests).
 
 Listens to an org's **runner scale set** over GitHub's actions-service
