@@ -76,7 +76,7 @@ func TestJobsInFlightFromBatchStatistics(t *testing.T) {
 }
 
 func TestJobsInFlightFromSessionCreation(t *testing.T) {
-	// ARC's restart-convergence pattern: the session response carries the
+	// Restart-convergence: the session response carries the
 	// statistics, so no event replay is needed after a restart.
 	fb := &fakeBroker{stats: &github.ScaleSetStatistics{TotalAssignedJobs: 2}}
 	src := NewBrokerSource(fb, 1, 2)

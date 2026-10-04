@@ -94,7 +94,7 @@ func main() {
 	}
 
 	// Demand discovery: the actions-service long-poll session on the runner
-	// scale set (the ARC listener model).
+	// scale set.
 	bc, err := gh.NewBrokerClient(context.Background(), cfg.GitHub.Org)
 	if err != nil {
 		slog.Error("broker client setup failed", "error", err)

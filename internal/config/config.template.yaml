@@ -60,15 +60,14 @@ vm:
   # unique per controller/host. Default: empty (= the scale set name).
   namePrefix: mac-mini-1-ephemeral-vm
 
-  # Minimum number of IDLE runners kept registered at all times (ARC
-  # minRunners semantics): jobs start in seconds instead of waiting ~60-90 s
+  # Minimum number of IDLE runners kept registered at all times: jobs start
+  # in seconds instead of waiting ~60-90 s
   # for a VM to boot, and a replacement boots as soon as an idle runner is
   # consumed. 0 = pure on-demand (scale from zero, back to zero).
   # Must be <= maxRunners. Default: 0.
   minRunners: 0
 
-  # Hard cap on the total number of VMs (busy + idle + booting)
-  # (ARC maxRunners semantics). Default: 2.
+  # Hard cap on the total number of VMs (busy + idle + booting). Default: 2.
   maxRunners: 2
 
   # Force-delete a VM that stays BUSY longer than this (stuck-job backstop).
@@ -111,7 +110,7 @@ vm:
     privateKeyPath: __HOME__/.ssh/gha-runner-controller
 
 # Job demand and the scaling loop. Discovery is always the broker: an HTTPS
-# long-poll session on the runner scale set (the internal API ARC uses) -
+# long-poll session on the runner scale set (GitHub's internal API) -
 # near-real-time, no per-repo REST polling, safe at any org size. Scaling is
 # driven by the scale-set statistics snapshot carried on every message batch
 # (the server is the source of truth); there is no client-side job tracking.
