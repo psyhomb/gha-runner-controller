@@ -205,13 +205,32 @@ so stale or misspelled keys fail loudly. Quick map:
 | `vm.minRunners` | minimum idle runners kept registered (0 = pure on-demand); counts toward maxRunners | 0 |
 | `vm.maxRunners` | hard cap on total VMs (busy + idle + booting) | 2 |
 | `vm.ttlMinutes` | force-delete VMs busy longer than this (stuck job) | 90 |
-| `vm.netSoftnet` | Softnet userspace networking: isolation + DHCP-churn fix; NOT default-deny (see template comments); requires the softnet binary (SUID) | `false` |
-| `vm.netSoftnetAllow` / `vm.netSoftnetBlock` | extra allow/block rules (`[in\|out] (CIDR\|@host)`); longest prefix wins, block wins ties; inert unless `netSoftnet: true`; LAN registries need an explicit allow | `[]` |
+| `vm.netSoftnet` | enable Softnet networking - see Networking (Softnet) below; requires the softnet binary | `false` |
+| `vm.netSoftnetAllow` | additional allow rules on top of the default policy below - e.g. a LAN package registry | `[]` |
+| `vm.netSoftnetBlock` | additional block rules; `["0.0.0.0/0"]` = default-deny egress, relaxed by allow entries | `[]` |
 | `vm.ssh.user` | guest SSH user | `admin` |
 | `vm.ssh.privateKeyPath` | controller's SSH private key | (required) |
 | `jobs.tickSeconds` | scaling-tick interval (recompute desired count, reap idle/TTL-expired VMs) | 15 |
 | `jobs.broker.scaleSetName` | runner scale set name (unique per runner group); also the VM name base when `vm.namePrefix` is empty | (required) |
 | `jobs.broker.capacity` | capacity advertised to the broker (X-ScaleSetMaxCapacity) - gates delivery/acquisition, NOT provisioning (PlanScale enforces the real cap) | maxRunners+1 |
+
+### Networking (Softnet)
+
+Softnet is a userspace packet filter written in Rust that sits between the
+VM's network interface and the host's vmnet framework. By default the VM can
+only:
+
+- send from its own MAC address
+- send from its DHCP-assigned IP (anti-spoofing)
+- send to globally routable IPv4 addresses + the vmnet gateway IP
+- receive any inbound traffic
+
+Allow/block rules use the form `[in|out] (IPv4 CIDR|@host)` - a bare CIDR or
+`@host` for stateless egress, `in`/`out` prefixes for stateful directional
+rules. Longest prefix match wins; an identical prefix in both lists blocks.
+Both lists take effect only when `vm.netSoftnet: true`. See
+`internal/config/config.template.yaml` for examples and installation
+(Softnet requires macOS 26+ and a SUID bit on the binary).
 
 ## Run as a service (LaunchDaemon)
 
