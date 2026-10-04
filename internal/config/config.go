@@ -4,7 +4,9 @@ package config
 import (
 	_ "embed"
 	"fmt"
+	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,6 +60,12 @@ type VMConfig struct {
 	MinRunners int    `yaml:"minRunners"` // minimum IDLE runners to keep registered (ARC minRunners; 0 = pure on-demand); counts toward maxRunners
 	MaxRunners int    `yaml:"maxRunners"` // hard cap on total VMs (busy + idle + booting)
 	TTLMinutes int    `yaml:"ttlMinutes"` // force-delete VMs busy longer than this (stuck job)
+
+	// Softnet userspace networking (tart --net-softnet*); enabled only when
+	// NetSoftnet is true - the allow/block lists are ignored otherwise.
+	NetSoftnet      bool     `yaml:"netSoftnet"`
+	NetSoftnetAllow []string `yaml:"netSoftnetAllow"`
+	NetSoftnetBlock []string `yaml:"netSoftnetBlock"`
 
 	// SSH access into guests (key auth; key installed in the base image).
 	SSH SSHConfig `yaml:"ssh"`
@@ -158,6 +166,21 @@ func (c Config) EffectiveLabels() []string {
 	return append(append([]string{}, c.Runner.Labels...), c.Jobs.Broker.ScaleSetName)
 }
 
+// validateSoftnetRule checks one netSoftnetAllow/netSoftnetBlock entry:
+// an optional "in "/"out " direction prefix, then an IPv4 CIDR or "@host"
+// (the vmnet gateway). Mirrors the softnet --allow/--block rule syntax.
+func validateSoftnetRule(rule string) error {
+	s := strings.TrimPrefix(rule, "in ")
+	s = strings.TrimPrefix(s, "out ")
+	if s == "@host" {
+		return nil
+	}
+	if _, err := netip.ParsePrefix(s); err != nil {
+		return fmt.Errorf("config: invalid softnet rule %q (want [in|out] (IPv4 CIDR|@host))", rule)
+	}
+	return nil
+}
+
 // LoadConfig reads and validates the YAML config file at path. Unknown keys
 // are rejected (KnownFields) so stale or misspelled keys fail loudly.
 func LoadConfig(path string) (Config, error) {
@@ -196,6 +219,11 @@ func LoadConfig(path string) (Config, error) {
 		return c, fmt.Errorf("config: jobs.broker.scaleSetName is required")
 	case c.EffectiveMinRunners() > c.EffectiveMaxRunners():
 		return c, fmt.Errorf("config: vm.minRunners (%d) must be <= vm.maxRunners (%d)", c.EffectiveMinRunners(), c.EffectiveMaxRunners())
+	}
+	for _, r := range slices.Concat(c.VM.NetSoftnetAllow, c.VM.NetSoftnetBlock) {
+		if err := validateSoftnetRule(r); err != nil {
+			return c, err
+		}
 	}
 	return c, nil
 }

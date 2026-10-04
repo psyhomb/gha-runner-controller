@@ -61,6 +61,18 @@ reason.
 
 ## One-time setup
 
+Host prerequisites on the tart host (macOS 26+):
+
+```bash
+brew install openai/tools/tart
+brew install openai/tools/softnet    # only when vm.netSoftnet: true
+sudo chown root:wheel $(which softnet) && sudo chmod u+s $(which softnet)
+```
+
+Softnet needs root at startup (it creates vmnet interfaces and tunes bootpd),
+then drops privileges; the SUID bit provides them since the controller daemon
+runs as a regular user.
+
 ### 1. GitHub App
 
 Settings -> Developer settings -> GitHub Apps -> New. Can be created under a
@@ -193,6 +205,8 @@ so stale or misspelled keys fail loudly. Quick map:
 | `vm.minRunners` | minimum idle runners kept registered (0 = pure on-demand); counts toward maxRunners | 0 |
 | `vm.maxRunners` | hard cap on total VMs (busy + idle + booting) | 2 |
 | `vm.ttlMinutes` | force-delete VMs busy longer than this (stuck job) | 90 |
+| `vm.netSoftnet` | Softnet userspace networking: isolation + DHCP-churn fix; NOT default-deny (see template comments); requires the softnet binary (SUID) | `false` |
+| `vm.netSoftnetAllow` / `vm.netSoftnetBlock` | extra allow/block rules (`[in\|out] (CIDR\|@host)`); longest prefix wins, block wins ties; inert unless `netSoftnet: true`; LAN registries need an explicit allow | `[]` |
 | `vm.ssh.user` | guest SSH user | `admin` |
 | `vm.ssh.privateKeyPath` | controller's SSH private key | (required) |
 | `jobs.tickSeconds` | scaling-tick interval (recompute desired count, reap idle/TTL-expired VMs) | 15 |

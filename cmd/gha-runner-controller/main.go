@@ -109,7 +109,11 @@ func main() {
 	jit := controller.NewScaleSetJITProvider(bc, scaleSetID, cfg.EffectiveWorkDir())
 	slog.Info("broker mode enabled", "scaleSet", cfg.Jobs.Broker.ScaleSetName, "scaleSetID", scaleSetID, "capacity", cfg.EffectiveBrokerCapacity())
 
-	vmm := vm.NewManager(tartBin, cfg.EffectiveSSHUser(), cfg.VM.SSH.PrivateKeyPath)
+	vmm := vm.NewManager(tartBin, cfg.EffectiveSSHUser(), cfg.VM.SSH.PrivateKeyPath, vm.SoftnetConfig{
+		Enabled: cfg.VM.NetSoftnet,
+		Allow:   cfg.VM.NetSoftnetAllow,
+		Block:   cfg.VM.NetSoftnetBlock,
+	})
 	ctl := controller.New(cfg, gh, src, vmm, jit)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

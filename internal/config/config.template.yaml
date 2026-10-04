@@ -75,6 +75,33 @@ vm:
   # Idle VMs have no TTL. Default: 90.
   ttlMinutes: 90
 
+  # Software networking via Softnet (tart --net-softnet) instead of the
+  # default vmnet shared NAT. Two wins: (1) isolation - a userspace packet
+  # filter blocks ARP/IP/MAC spoofing and, by default, everything except
+  # globally-routable IPv4 + the vmnet gateway IP (implicit fallbacks; it is
+  # NOT default-deny - for that add "0.0.0.0/0" to netSoftnetBlock and relax
+  # via netSoftnetAllow); (2) DHCP exhaustion fix - default vmnet DHCP hands
+  # out 24h leases on a /24 (~253 VMs/day); softnet uses per-VM /30 networks
+  # and tunes bootpd leases to 10min. Caveats: guests cannot reach host
+  # services via the NAT router IP; very long-idle connections may be dropped
+  # (stateful flow cache). Requires macOS 26+ and the softnet binary:
+  #   brew install openai/tools/softnet
+  #   sudo chown root:wheel $(which softnet) && sudo chmod u+s $(which softnet)
+  # netSoftnetAllow/netSoftnetBlock take effect only when netSoftnet: true.
+  # Rule syntax: [in|out] (IPv4 CIDR|@host); longest prefix match wins,
+  # block wins ties.
+  # Examples:
+  #   netSoftnetBlock: ["0.0.0.0/0"]                    # default-deny egress...
+  #   netSoftnetAllow: ["10.0.0.0/8"]                   # whole LAN (e.g. package registry)
+  #   netSoftnetAllow: ["192.168.10.5/32"]              # a single host only
+  #   netSoftnetAllow: ["10.0.0.0/8"]                   # ...relaxed for these destinations only
+  #   netSoftnetAllow: ["@host"]                        # the vmnet gateway IP (host NAT)
+  #   netSoftnetBlock: ["out @host"]                    # cut guest -> gateway/host traffic
+  #   netSoftnetAllow: ["out 10.1.0.0/16", "in @host"]  # directional (stateful) rules
+  netSoftnet: false
+  netSoftnetAllow: []
+  netSoftnetBlock: []
+
   # SSH access into guests (key auth; the public key must be installed in the
   # base image).
   ssh:
