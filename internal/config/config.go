@@ -57,7 +57,7 @@ type VMConfig struct {
 	CPU        int    `yaml:"cpu"`        // 0 = keep image default
 	MemoryMB   int    `yaml:"memoryMB"`   // 0 = keep image default
 	NamePrefix string `yaml:"namePrefix"` // ephemeral VM/runner name prefix; "eph-" when empty; a trailing "-" is added if missing
-	MinRunners int    `yaml:"minRunners"` // minimum IDLE runners to keep registered (ARC minRunners; 0 = pure on-demand); counts toward maxRunners
+	MinRunners int    `yaml:"minRunners"` // minimum IDLE runners to keep registered (0 = pure on-demand); counts toward maxRunners
 	MaxRunners int    `yaml:"maxRunners"` // hard cap on total VMs (busy + idle + booting)
 	TTLMinutes int    `yaml:"ttlMinutes"` // force-delete VMs busy longer than this (stuck job)
 

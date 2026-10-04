@@ -1,8 +1,8 @@
 // Package jobsource discovers demand for runners via the actions-service
-// long-poll ("broker"): the internal API ARC consumes. Scaling is driven by
+// long-poll ("broker"): GitHub's internal API. Scaling is driven by
 // the scale-set statistics snapshot carried on every message batch (and
 // returned at session creation) - there is no client-side job bookkeeping to
-// go stale. This is ARC's model: the server is the source of truth on every
+// go stale. The server is the source of truth on every
 // message, and every state change generates a message, so the cached snapshot
 // is current by construction.
 package jobsource
@@ -42,7 +42,7 @@ type BrokerAPI interface {
 // set of busy runners (protects reaping).
 //
 // Acquisition discipline: per the official actions/scaleset listener contract
-// (the library ARC uses), every JobAvailable the listener wants must be
+// (the official actions/scaleset library), every JobAvailable the listener wants must be
 // passed to AcquireJobs, or the job stays unassigned forever. Jobs queued
 // while a runner is already registered are assigned directly by GitHub and
 // need no acquisition - JobAvailable is the scale-from-zero path. Batches
@@ -168,7 +168,7 @@ func (s *BrokerSource) Start(ctx context.Context) {
 			if s.handle(ctx, msg) {
 				delete(attempts, msg.MessageID)
 				// lastMessageID advances only after successful handling,
-				// then the message is acked (mirrors the ARC listener).
+				// then the message is acked (mirrors the reference listener).
 				s.setLastMessageID(msg.MessageID)
 				if err := s.broker.DeleteMessage(ctx, s.scaleSetID, msg.MessageID); err != nil {
 					slog.Warn("broker: ack message failed", "messageID", msg.MessageID, "error", err)

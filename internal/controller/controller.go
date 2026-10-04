@@ -1,5 +1,5 @@
 // Package controller reconciles scale-set demand with ephemeral tart VMs
-// using ARC-style min/max scaling (ADR 2023-11-02 semantics): all VMs are
+// using min/max scaling: all VMs are
 // fungible - any VM may serve any job routed to the scale set. Every tick the
 // controller scales the total VM count toward
 // min(minRunners + jobsInFlight, maxRunners), where jobsInFlight comes from
@@ -152,7 +152,7 @@ func (c *Controller) scaleUpPaused() (time.Time, bool) {
 	return c.bootCooldownUntil, time.Now().Before(c.bootCooldownUntil)
 }
 
-// PlanScale computes VM scaling for one tick with ARC minRunners/maxRunners
+// PlanScale computes VM scaling for one tick with minRunners/maxRunners
 // semantics: keep minVMs idle runners plus one VM per in-flight job, capped
 // at maxVMs.
 //

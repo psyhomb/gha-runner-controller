@@ -1,6 +1,6 @@
 // broker.go implements the GitHub actions-service ("broker") client used for
-// runner scale set message sessions: an internal, undocumented long-poll API
-// consumed first-party by ARC. Protocol reference: github.com/actions/scaleset.
+// runner scale set message sessions: an internal, undocumented long-poll API.
+// Protocol reference: github.com/actions/scaleset.
 package github
 
 import (
@@ -381,7 +381,7 @@ func (b *BrokerClient) getMessage(ctx context.Context, lastMessageID, maxCapacit
 	}
 }
 
-// AcquireJobs acquires job requests on behalf of the scale set; per the ARC
+// AcquireJobs acquires job requests on behalf of the scale set; per the
 // listener contract, a JobAvailable that is never acquired stays unassigned
 // forever. Authenticates with the message-queue token, not the admin token.
 // Returns the request IDs that were actually acquired.

@@ -286,7 +286,7 @@ func (g *Client) GetRunnerRegistrationToken(ctx context.Context, org string) (st
 }
 
 // ActionsServiceConnection holds the actions-service (broker) base URL and
-// admin token. Internal GitHub API, as used by ARC.
+// admin token. Internal GitHub API.
 type ActionsServiceConnection struct {
 	URL       string
 	Token     string
