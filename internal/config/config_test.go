@@ -111,3 +111,26 @@ func TestDefaultTemplate(t *testing.T) {
 		t.Errorf("generated template should pass LoadConfig, got %v", err)
 	}
 }
+
+func TestLoadConfigSoftnetRules(t *testing.T) {
+	inject := func(rules string) string {
+		return strings.Replace(validYAML, "  baseImage: img\n",
+			"  baseImage: img\n  netSoftnet: true\n"+rules, 1)
+	}
+	valid := inject("  netSoftnetAllow: [\"10.0.0.0/8\", \"in @host\", \"out 192.168.1.0/24\", \"@host\"]\n  netSoftnetBlock: [\"0.0.0.0/0\"]\n")
+	if _, err := LoadConfig(writeConfig(t, valid)); err != nil {
+		t.Errorf("valid softnet rules rejected: %v", err)
+	}
+	for _, bad := range []string{"10.0.0.0/33", "not-a-cidr", "in10.0.0.0/8", "in @hostx"} {
+		cfg := inject("  netSoftnetAllow: [\"" + bad + "\"]\n")
+		if _, err := LoadConfig(writeConfig(t, cfg)); err == nil {
+			t.Errorf("invalid softnet rule %q should be rejected", bad)
+		}
+	}
+	// inert lists (netSoftnet: false) are still format-validated
+	inert := strings.Replace(validYAML, "  baseImage: img\n",
+		"  baseImage: img\n  netSoftnetAllow: [\"10.0.0.0/8\"]\n", 1)
+	if _, err := LoadConfig(writeConfig(t, inert)); err != nil {
+		t.Errorf("inert (netSoftnet off) valid rules rejected: %v", err)
+	}
+}

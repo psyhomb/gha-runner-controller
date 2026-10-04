@@ -50,15 +50,25 @@ func startCmd(ctx context.Context, name string, args ...string) (Process, error)
 	return cmd, nil
 }
 
+// SoftnetConfig is the guest networking mode (tart --net-softnet* flags).
+// Allow/Block take effect only when Enabled is true.
+type SoftnetConfig struct {
+	Enabled bool
+	Allow   []string
+	Block   []string
+}
+
 // Manager performs VM operations via tart and guest operations via SSH.
 type Manager struct {
 	TartBin    string // path to the tart binary
 	SSHUser    string // guest SSH user
 	SSHKeyPath string // private key for guest access
+
+	softnet SoftnetConfig
 }
 
-func NewManager(tartBin, sshUser, sshKeyPath string) *Manager {
-	return &Manager{TartBin: tartBin, SSHUser: sshUser, SSHKeyPath: sshKeyPath}
+func NewManager(tartBin, sshUser, sshKeyPath string, softnet SoftnetConfig) *Manager {
+	return &Manager{TartBin: tartBin, SSHUser: sshUser, SSHKeyPath: sshKeyPath, softnet: softnet}
 }
 
 // Clone creates name from baseImage.
@@ -85,7 +95,17 @@ func (m *Manager) Set(ctx context.Context, name string, cpu, memoryMB int) error
 
 // Start launches `tart run` as a child process; it exits when the VM stops.
 func (m *Manager) Start(ctx context.Context, name string) (Process, error) {
-	return startCmd(ctx, m.TartBin, "run", name, "--no-graphics")
+	args := []string{"run", name, "--no-graphics"}
+	if m.softnet.Enabled {
+		args = append(args, "--net-softnet")
+		if len(m.softnet.Allow) > 0 {
+			args = append(args, "--net-softnet-allow="+strings.Join(m.softnet.Allow, ","))
+		}
+		if len(m.softnet.Block) > 0 {
+			args = append(args, "--net-softnet-block="+strings.Join(m.softnet.Block, ","))
+		}
+	}
+	return startCmd(ctx, m.TartBin, args...)
 }
 
 // IP waits for and returns the VM's IP address.
