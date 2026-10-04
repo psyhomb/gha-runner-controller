@@ -222,7 +222,7 @@ only:
 
 - send from its own MAC address
 - send from its DHCP-assigned IP (anti-spoofing)
-- send to globally routable IPv4 addresses + the vmnet gateway IP
+- send to Internet routable IPv4 addresses + the vmnet gateway IP
 - receive any inbound traffic
 
 Allow/block rules use the form `[in|out] (IPv4 CIDR|@host)` - a bare CIDR or
