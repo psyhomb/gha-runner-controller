@@ -56,6 +56,7 @@ func main() {
 
 	var levelVar slog.LevelVar
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: &levelVar})))
+	slog.Info("starting", "version", version)
 
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
