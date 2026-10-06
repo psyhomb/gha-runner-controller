@@ -1,4 +1,4 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/232e15df-233e-40b5-9592-73f1a7e82398"><source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/232e15df-233e-40b5-9592-73f1a7e82398"><img width="256" height="256" alt="gha-runner-controller-logo" src="https://github.com/user-attachments/assets/232e15df-233e-40b5-9592-73f1a7e82398"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/2371f009-49aa-4770-9ac3-703d737b6c7a"><source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/2371f009-49aa-4770-9ac3-703d737b6c7a"><img width="256" height="256" alt="gha-runner-controller-logo" src="https://github.com/user-attachments/assets/2371f009-49aa-4770-9ac3-703d737b6c7a"></picture></p>
 
 # gha-runner-controller
 
