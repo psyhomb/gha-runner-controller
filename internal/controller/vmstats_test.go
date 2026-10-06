@@ -85,16 +85,16 @@ func TestTTLExpired(t *testing.T) {
 func TestBootFailureBackoff(t *testing.T) {
 	c := &Controller{}
 	for i := 0; i < maxConsecutiveBootFailures; i++ {
-		if _, paused := c.scaleUpPaused(); paused {
+		if _, _, paused := c.scaleUpPaused(); paused {
 			t.Fatalf("paused after %d failures, want pause only at %d", i, maxConsecutiveBootFailures)
 		}
 		c.noteBootFailure()
 	}
-	if _, paused := c.scaleUpPaused(); !paused {
-		t.Fatal("scale-up should pause after maxConsecutiveBootFailures")
+	if _, failures, paused := c.scaleUpPaused(); !paused || failures != maxConsecutiveBootFailures {
+		t.Fatalf("scale-up should pause after maxConsecutiveBootFailures (paused=%v failures=%d)", paused, failures)
 	}
 	c.noteBootSuccess()
-	if _, paused := c.scaleUpPaused(); paused {
+	if _, _, paused := c.scaleUpPaused(); paused {
 		t.Fatal("a successful registration should reset the backoff")
 	}
 }

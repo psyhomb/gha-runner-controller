@@ -115,7 +115,7 @@ tasks:
       - mkdir -p rendered
       - sed -e 's|__REMOTE_USER__|{{.REMOTE_USER}}|g' -e 's|__REMOTE_HOME__|{{.REMOTE_HOME}}|g' deploy/local.gha-runner-controller.plist > rendered/{{.LABEL}}.plist
       - plutil -lint rendered/{{.LABEL}}.plist
-      - HOME={{.REMOTE_HOME}} go run ./cmd/gha-runner-controller -gen-config > rendered/config.yaml
+      - sed -e 's|__HOME__|{{.REMOTE_HOME}}|g' internal/config/config.template.yaml > rendered/config.yaml
 
   install:
     desc: One-time install on the target host (local default, REMOTE_HOST=host for remote; binary + plist + config if missing; does NOT start the daemon - use 'task start')

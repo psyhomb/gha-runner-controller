@@ -146,10 +146,10 @@ func (c *Controller) noteBootSuccess() {
 	c.bootCooldownUntil = time.Time{}
 }
 
-func (c *Controller) scaleUpPaused() (time.Time, bool) {
+func (c *Controller) scaleUpPaused() (until time.Time, failures int, paused bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.bootCooldownUntil, time.Now().Before(c.bootCooldownUntil)
+	return c.bootCooldownUntil, c.bootFails, time.Now().Before(c.bootCooldownUntil)
 }
 
 // PlanScale computes VM scaling for one tick with minRunners/maxRunners
@@ -341,8 +341,12 @@ func (c *Controller) reconcile(ctx context.Context) {
 	idleNames, busy := c.vmStats()
 	total := c.vmCount()
 	scaleUp, scaleDown := PlanScale(inFlight, len(idleNames), total, c.cfg.EffectiveMinRunners(), c.cfg.EffectiveMaxRunners())
-	if until, paused := c.scaleUpPaused(); paused && scaleUp > 0 {
-		slog.Warn("scale-up paused after repeated boot failures", "until", until.Format(time.RFC3339), "suppressed", scaleUp)
+	if until, failures, paused := c.scaleUpPaused(); paused && scaleUp > 0 {
+		slog.Warn("scale-up paused after repeated boot failures",
+			"remaining", time.Until(until).Round(time.Second),
+			"until", until.Format(time.RFC3339),
+			"failures", failures,
+			"suppressed", scaleUp)
 		scaleUp = 0
 	}
 	reap := c.reapable(idleNames)
