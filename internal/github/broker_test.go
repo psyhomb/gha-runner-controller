@@ -118,13 +118,29 @@ func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
 					}
 					json.NewEncoder(w).Encode(map[string]any{
 						"count": 1,
-						"value": []scaleSet{{ID: 7, Name: "ss", RunnerGroupID: 1, Labels: stored}},
+						"value": []scaleSet{{
+							ID:            7,
+							Name:          "ss",
+							RunnerGroupID: 1,
+							Labels:        stored,
+							RunnerSetting: runnerSetting{DisableUpdate: true},
+							CreatedOn:     time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+						}},
 					})
 				case http.MethodPatch:
 					patched = true
 					var body scaleSet
 					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 						t.Errorf("PATCH body decode: %v", err)
+					}
+					if body.ID != 7 {
+						t.Errorf("PATCH body id = %d, want 7 (full round-trip)", body.ID)
+					}
+					if !body.RunnerSetting.DisableUpdate {
+						t.Error("PATCH body lost RunnerSetting from the fetched entity")
+					}
+					if body.CreatedOn.IsZero() {
+						t.Error("PATCH body lost createdOn from the fetched entity")
 					}
 					if len(body.Labels) != 2 || body.Labels[0].Type != "System" {
 						t.Errorf("PATCH labels = %+v, want 2 System labels", body.Labels)

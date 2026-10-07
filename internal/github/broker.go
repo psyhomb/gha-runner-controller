@@ -146,11 +146,22 @@ type scaleSetLabel struct {
 	Name string `json:"name"`
 }
 
+type runnerSetting struct {
+	DisableUpdate bool `json:"disableUpdate,omitempty"`
+}
+
+// scaleSet mirrors the actions-service scale set entity. The PATCH update
+// must round-trip the full fetched object (a partial body is accepted with
+// 200 but silently not applied), so every server field is preserved here.
 type scaleSet struct {
-	ID            int             `json:"id,omitempty"`
-	Name          string          `json:"name,omitempty"`
-	RunnerGroupID int             `json:"runnerGroupId,omitempty"`
-	Labels        []scaleSetLabel `json:"labels,omitempty"`
+	ID                 int             `json:"id,omitempty"`
+	Name               string          `json:"name,omitempty"`
+	RunnerGroupID      int             `json:"runnerGroupId,omitempty"`
+	RunnerGroupName    string          `json:"runnerGroupName,omitempty"`
+	Labels             []scaleSetLabel `json:"labels,omitempty"`
+	RunnerSetting      runnerSetting   `json:"RunnerSetting"` // exact capital-R key, always serialized
+	CreatedOn          time.Time       `json:"createdOn"`
+	RunnerJitConfigURL string          `json:"runnerJitConfigUrl,omitempty"`
 }
 
 // GetOrCreateScaleSet returns the ID of the named scale set in the given
@@ -175,13 +186,16 @@ func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, nam
 	case 1:
 		existing := list.Value[0]
 		if !sameLabels(existing.Labels, ls) {
-			body, _ := json.Marshal(scaleSet{Name: name, RunnerGroupID: groupID, Labels: ls})
+			// Round-trip the full fetched entity with only Labels swapped;
+			// a partial PATCH body is a silent server-side no-op.
+			existing.Labels = ls
+			body, _ := json.Marshal(existing)
 			var updated scaleSet
 			path := fmt.Sprintf("%s/%d", scaleSetEndpoint, existing.ID)
 			if err := b.doActionsService(ctx, http.MethodPatch, path, bytes.NewReader(body), http.StatusOK, &updated); err != nil {
 				return 0, fmt.Errorf("broker: update scale set %q labels: %w", name, err)
 			}
-			slog.Info("scale set labels updated", "name", name, "old", labelNames(existing.Labels), "new", labels)
+			slog.Info("scale set labels updated", "name", name, "old", labelNames(list.Value[0].Labels), "new", labelNames(updated.Labels))
 		}
 		return existing.ID, nil
 	case 0:
