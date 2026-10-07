@@ -185,29 +185,49 @@ func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, nam
 	switch list.Count {
 	case 1:
 		existing := list.Value[0]
-		if !sameLabels(existing.Labels, ls) {
-			// Round-trip the full fetched entity with only Labels swapped;
-			// a partial PATCH body is a silent server-side no-op.
-			existing.Labels = ls
-			body, _ := json.Marshal(existing)
-			var updated scaleSet
-			path := fmt.Sprintf("%s/%d", scaleSetEndpoint, existing.ID)
-			if err := b.doActionsService(ctx, http.MethodPatch, path, bytes.NewReader(body), http.StatusOK, &updated); err != nil {
-				return 0, fmt.Errorf("broker: update scale set %q labels: %w", name, err)
-			}
-			slog.Info("scale set labels updated", "name", name, "old", labelNames(list.Value[0].Labels), "new", labelNames(updated.Labels))
+		if sameLabels(existing.Labels, ls) {
+			return existing.ID, nil
 		}
-		return existing.ID, nil
+		// Labels are immutable after creation: the actions service accepts a
+		// PATCH but never applies label changes (verified: 200 with the old
+		// labels echoed back). The only way to change them is delete+recreate.
+		path := fmt.Sprintf("%s/%d", scaleSetEndpoint, existing.ID)
+		if err := b.doActionsService(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
+			slog.Warn("scale set labels differ but delete failed - keeping old labels; delete the scale set manually and restart",
+				"name", name, "old", labelNames(existing.Labels), "new", labels, "error", err)
+			return existing.ID, nil
+		}
+		slog.Info("scale set deleted for label change", "name", name, "old", labelNames(existing.Labels), "new", labels)
+		created, err := b.createScaleSet(ctx, groupID, name, ls)
+		if err != nil {
+			return 0, err
+		}
+		return created.ID, nil
 	case 0:
-		body, _ := json.Marshal(scaleSet{Name: name, RunnerGroupID: groupID, Labels: ls})
-		var created scaleSet
-		if err := b.doActionsService(ctx, http.MethodPost, scaleSetEndpoint, bytes.NewReader(body), http.StatusOK, &created); err != nil {
-			return 0, fmt.Errorf("broker: create scale set %q: %w", name, err)
+		created, err := b.createScaleSet(ctx, groupID, name, ls)
+		if err != nil {
+			return 0, err
 		}
 		return created.ID, nil
 	default:
 		return 0, fmt.Errorf("broker: multiple runner scale sets named %q", name)
 	}
+}
+
+// createScaleSet creates the scale set with runner self-update disabled
+// (runners are ephemeral - a mid-job update is pointless).
+func (b *BrokerClient) createScaleSet(ctx context.Context, groupID int, name string, labels []scaleSetLabel) (*scaleSet, error) {
+	body, _ := json.Marshal(scaleSet{
+		Name:          name,
+		RunnerGroupID: groupID,
+		Labels:        labels,
+		RunnerSetting: runnerSetting{DisableUpdate: true},
+	})
+	var created scaleSet
+	if err := b.doActionsService(ctx, http.MethodPost, scaleSetEndpoint, bytes.NewReader(body), http.StatusOK, &created); err != nil {
+		return nil, fmt.Errorf("broker: create scale set %q: %w", name, err)
+	}
+	return &created, nil
 }
 
 // sameLabels reports whether two label lists hold the same names, order and

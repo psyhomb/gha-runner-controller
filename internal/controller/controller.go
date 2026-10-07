@@ -318,8 +318,6 @@ func (c *Controller) Run(ctx context.Context) {
 		"ttl", c.cfg.TTL(),
 		"tickInterval", c.cfg.TickInterval())
 
-	c.cleanupOrphans(ctx)
-
 	ticker := time.NewTicker(c.cfg.TickInterval())
 	defer ticker.Stop()
 	c.reconcile(ctx) // first pass immediately
@@ -377,24 +375,29 @@ func (c *Controller) reconcile(ctx context.Context) {
 	}
 }
 
-// cleanupOrphans force-removes every VM whose name starts with the VM name
-// base (used at controller startup; assumes a single controller instance owns
-// the namespace).
-func (c *Controller) cleanupOrphans(ctx context.Context) {
-	names, err := c.vmm.List(ctx)
+// CleanupOrphans force-removes every VM whose name starts with the VM name
+// base and deregisters their runners (used at controller startup, before the
+// broker session opens; assumes a single controller instance owns the
+// namespace).
+func CleanupOrphans(ctx context.Context, vmm *vm.Manager, gh GitHubAPI, org, nameBase string) {
+	names, err := vmm.List(ctx)
 	if err != nil {
 		slog.Warn("cleanup orphans: list VMs failed", "error", err)
 		return
 	}
-	prefix := c.cfg.VMNameBase() + "-"
+	prefix := nameBase + "-"
 	for _, name := range names {
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
 		slog.Info("cleanup orphan VM", "vm", name)
-		c.deregisterRunner(ctx, name) // best-effort
-		_ = c.vmm.Stop(ctx, name)     // ignore "not running" errors
-		if err := c.vmm.Delete(ctx, name); err != nil {
+		if deleted, err := gh.DeleteRunnerByName(ctx, "org", org, "", name); err != nil {
+			slog.Warn("deregister runner failed", "runner", name, "error", err)
+		} else if deleted {
+			slog.Info("deregistered runner", "runner", name)
+		}
+		_ = vmm.Stop(ctx, name) // ignore "not running" errors
+		if err := vmm.Delete(ctx, name); err != nil {
 			slog.Warn("cleanup orphan VM: delete failed", "vm", name, "error", err)
 		}
 	}
