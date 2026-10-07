@@ -99,15 +99,19 @@ func TestSameLabels(t *testing.T) {
 
 func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		stored    []string
-		wantPatch bool
+		name         string
+		stored       []string
+		deleteStatus int
+		wantDelete   bool
+		wantCreate   bool
+		wantID       int
 	}{
-		{"labels changed", []string{"self-hosted", "tahoe"}, true},
-		{"labels unchanged (reordered)", []string{"macOS", "self-hosted"}, false},
+		{"labels changed - recreate", []string{"self-hosted", "tahoe"}, http.StatusNoContent, true, true, 9},
+		{"labels unchanged (reordered)", []string{"macOS", "self-hosted"}, http.StatusNoContent, false, false, 7},
+		{"delete fails - keep old set", []string{"self-hosted", "tahoe"}, http.StatusUnprocessableEntity, true, false, 7},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var patched bool
+			var deleted, created bool
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.Method {
@@ -118,33 +122,24 @@ func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
 					}
 					json.NewEncoder(w).Encode(map[string]any{
 						"count": 1,
-						"value": []scaleSet{{
-							ID:            7,
-							Name:          "ss",
-							RunnerGroupID: 1,
-							Labels:        stored,
-							RunnerSetting: runnerSetting{DisableUpdate: true},
-							CreatedOn:     time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-						}},
+						"value": []scaleSet{{ID: 7, Name: "ss", RunnerGroupID: 1, Labels: stored}},
 					})
-				case http.MethodPatch:
-					patched = true
+				case http.MethodDelete:
+					deleted = true
+					w.WriteHeader(tc.deleteStatus)
+				case http.MethodPost:
+					created = true
 					var body scaleSet
 					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-						t.Errorf("PATCH body decode: %v", err)
-					}
-					if body.ID != 7 {
-						t.Errorf("PATCH body id = %d, want 7 (full round-trip)", body.ID)
+						t.Errorf("POST body decode: %v", err)
 					}
 					if !body.RunnerSetting.DisableUpdate {
-						t.Error("PATCH body lost RunnerSetting from the fetched entity")
-					}
-					if body.CreatedOn.IsZero() {
-						t.Error("PATCH body lost createdOn from the fetched entity")
+						t.Error("create body should disable runner self-update")
 					}
 					if len(body.Labels) != 2 || body.Labels[0].Type != "System" {
-						t.Errorf("PATCH labels = %+v, want 2 System labels", body.Labels)
+						t.Errorf("create labels = %+v, want 2 System labels", body.Labels)
 					}
+					body.ID = 9
 					json.NewEncoder(w).Encode(body)
 				default:
 					t.Errorf("unexpected %s %s", r.Method, r.URL)
@@ -156,11 +151,14 @@ func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if id != 7 {
-				t.Errorf("scale set ID = %d, want 7", id)
+			if id != tc.wantID {
+				t.Errorf("scale set ID = %d, want %d", id, tc.wantID)
 			}
-			if patched != tc.wantPatch {
-				t.Errorf("PATCH called = %v, want %v", patched, tc.wantPatch)
+			if deleted != tc.wantDelete {
+				t.Errorf("DELETE called = %v, want %v", deleted, tc.wantDelete)
+			}
+			if created != tc.wantCreate {
+				t.Errorf("POST called = %v, want %v", created, tc.wantCreate)
 			}
 		})
 	}

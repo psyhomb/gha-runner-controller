@@ -94,6 +94,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	vmm := vm.NewManager(tartBin, cfg.EffectiveSSHUser(), cfg.VM.SSH.PrivateKeyPath, vm.SoftnetConfig{
+		Enabled: cfg.VM.NetSoftnet,
+		Allow:   cfg.VM.NetSoftnetAllow,
+		Block:   cfg.VM.NetSoftnetBlock,
+	})
+
+	// Startup fleet cleanup before the broker session opens (fresh statistics
+	// snapshot) and before the scale set is reconciled (a label-drift recreate
+	// requires no registered runners).
+	controller.CleanupOrphans(context.Background(), vmm, gh, cfg.GitHub.Org, cfg.VMNameBase())
+
 	// Demand discovery: the actions-service long-poll session on the runner
 	// scale set.
 	bc, err := gh.NewBrokerClient(context.Background(), cfg.GitHub.Org)
@@ -110,11 +121,6 @@ func main() {
 	jit := controller.NewScaleSetJITProvider(bc, scaleSetID, cfg.EffectiveWorkDir())
 	slog.Info("broker mode enabled", "scaleSet", cfg.Jobs.Broker.ScaleSetName, "scaleSetID", scaleSetID, "capacity", cfg.EffectiveBrokerCapacity())
 
-	vmm := vm.NewManager(tartBin, cfg.EffectiveSSHUser(), cfg.VM.SSH.PrivateKeyPath, vm.SoftnetConfig{
-		Enabled: cfg.VM.NetSoftnet,
-		Allow:   cfg.VM.NetSoftnetAllow,
-		Block:   cfg.VM.NetSoftnetBlock,
-	})
 	ctl := controller.New(cfg, gh, src, vmm, jit)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

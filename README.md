@@ -196,7 +196,7 @@ so stale or misspelled keys fail loudly. Quick map:
 | `github.org` | organization that owns the runners | (required) |
 | `github.scope` | must be `org` (or empty = auto-detect); repo scope is not supported (scale sets are an org concept) | `` (auto) |
 | `github.appID` / `github.installationID` / `github.keyPath` | GitHub App credentials (PEM at keyPath, chmod 600) | (required) |
-| `runner.labels` | the complete, exact label set of the runner (started with `--no-default-labels`, so nothing is added implicitly); the scale set name is appended automatically | (required) |
+| `runner.labels` | the complete, exact label set of the runner (started with `--no-default-labels`, so nothing is added implicitly); the scale set name is appended automatically; scale set labels are immutable - on change the controller recreates the scale set at startup | (required) |
 | `runner.groupID` | runner group for the scale set; the group's repo visibility is the repo filter | 1 (Default) |
 | `runner.workDir` | runner work dir in guest | `_work` |
 | `vm.baseImage` | tart image to clone from | (required) |

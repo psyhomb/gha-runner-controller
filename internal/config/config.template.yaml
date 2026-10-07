@@ -34,6 +34,10 @@ runner:
   # is appended automatically. A job routes to the scale set when its runs-on
   # labels are a subset of this set (the scale set name is the unique,
   # precise-targeting label). Required (at least one).
+  # Scale set labels are immutable after creation: when this list changes,
+  # the controller deletes and recreates the scale set at startup (after the
+  # fleet cleanup, so no runners block the delete). Queued jobs targeting the
+  # old scale set may be affected - change labels during quiet periods.
   labels: [self-hosted, macOS, ARM64, tahoe]
 
   # Runner group the runners register into (org-level groups only). The group
