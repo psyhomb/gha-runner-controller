@@ -185,6 +185,9 @@ gha-runner-controller` clears the flag.)
 
 ## Configuration (config.yaml)
 
+Config search order: explicit `-config` > `./config.yaml` (current
+directory) > `~/.config/<binary-name>/config.yaml` (the fallback is logged).
+
 `internal/config/config.template.yaml` documents **every parameter inline**
 (detailed comments, defaults, gotchas) - it is the reference, embedded in the
 binary and printed via `-gen-config`. Unknown keys are rejected at startup,
@@ -420,6 +423,25 @@ Discovery is message-driven; the only remaining REST calls are runner
 deregistration, a per-VM registration check (3-min never-registered
 backstop), and token refresh - all far below the GitHub App 5,000
 requests/hour budget at any org size.
+
+## Deleting runner scale sets
+
+```bash
+gha-runner-controller -config /path/to/config.yaml --delete-runner-scale-sets rss1,rss2
+# scale set in a non-default runner group (names are unique per group):
+gha-runner-controller -config /path/to/config.yaml --delete-runner-scale-sets rss1 --runner-group-id 42
+```
+
+Deletes the named scale sets via the same actions-service path the
+controller uses - no `gh` CLI or PAT needed, and no tart required on the
+machine. Names resolve within a runner group (unique per group, not per
+org): the group comes from `--runner-group-id`, else `runner.groupID` from
+the config, else 1 (the "Default" group). Each failure (e.g. **422 - the
+scale set still has registered runners**) is printed in full with the error
+code to stderr; the command exits 1 if any delete failed. Successes are
+logged and independent per name. Note: if the deleted name is the
+configured `jobs.broker.scaleSetName`, the controller recreates it on the
+next start.
 
 ## Troubleshooting
 
