@@ -88,18 +88,49 @@ func TestTTLExpired(t *testing.T) {
 
 func TestBootFailureBackoff(t *testing.T) {
 	c := &Controller{}
-	for i := 0; i < maxConsecutiveBootFailures; i++ {
+	threshold := c.cfg.EffectiveBootFailureThreshold()
+	for i := 0; i < threshold; i++ {
 		if _, _, paused := c.scaleUpPaused(); paused {
-			t.Fatalf("paused after %d failures, want pause only at %d", i, maxConsecutiveBootFailures)
+			t.Fatalf("paused after %d failures, want pause only at %d", i, threshold)
 		}
 		c.noteBootFailure()
 	}
-	if _, failures, paused := c.scaleUpPaused(); !paused || failures != maxConsecutiveBootFailures {
-		t.Fatalf("scale-up should pause after maxConsecutiveBootFailures (paused=%v failures=%d)", paused, failures)
+	if _, failures, paused := c.scaleUpPaused(); !paused || failures != threshold {
+		t.Fatalf("scale-up should pause after %d failures (paused=%v failures=%d)", threshold, paused, failures)
 	}
 	c.noteBootSuccess()
 	if _, _, paused := c.scaleUpPaused(); paused {
 		t.Fatal("a successful registration should reset the backoff")
+	}
+}
+
+func TestBootFailureBackoffCustomThreshold(t *testing.T) {
+	c := &Controller{}
+	c.cfg.VM.BootFailureThreshold = 2
+	c.noteBootFailure()
+	if _, _, paused := c.scaleUpPaused(); paused {
+		t.Fatal("paused after 1 failure, want pause only at the configured 2")
+	}
+	c.noteBootFailure()
+	until, _, paused := c.scaleUpPaused()
+	if !paused {
+		t.Fatal("scale-up should pause at the configured threshold of 2")
+	}
+	// Default cooldown (5 min) when unset
+	if d := time.Until(until); d < 4*time.Minute || d > 6*time.Minute {
+		t.Errorf("cooldown = %v, want ~5m", d)
+	}
+
+	c = &Controller{}
+	c.cfg.VM.BootFailureThreshold = 1
+	c.cfg.VM.BootFailureCooldownMinutes = 30
+	c.noteBootFailure()
+	until, _, paused = c.scaleUpPaused()
+	if !paused {
+		t.Fatal("scale-up should pause at the configured threshold of 1")
+	}
+	if d := time.Until(until); d < 29*time.Minute || d > 31*time.Minute {
+		t.Errorf("cooldown = %v, want ~30m", d)
 	}
 }
 

@@ -94,11 +94,6 @@ type vmState struct {
 	cancel       context.CancelFunc
 }
 
-const (
-	maxConsecutiveBootFailures = 3
-	bootFailureCooldown        = 5 * time.Minute
-)
-
 func New(cfg config.Config, gh GitHubAPI, src jobsource.Source, vmm *vm.Manager, jit JITProvider) *Controller {
 	return &Controller{
 		cfg: cfg,
@@ -136,14 +131,15 @@ func (c *Controller) untrackVM(name string) {
 	delete(c.vms, name)
 }
 
-// noteBootFailure counts consecutive boot failures; after
-// maxConsecutiveBootFailures, scale-up pauses for bootFailureCooldown.
+// noteBootFailure counts consecutive boot failures; after the configured
+// threshold (vm.bootFailureThreshold), scale-up pauses for the configured
+// cooldown (vm.bootFailureCooldownMinutes).
 func (c *Controller) noteBootFailure() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bootFails++
-	if c.bootFails >= maxConsecutiveBootFailures {
-		c.bootCooldownUntil = time.Now().Add(bootFailureCooldown)
+	if c.bootFails >= c.cfg.EffectiveBootFailureThreshold() {
+		c.bootCooldownUntil = time.Now().Add(c.cfg.BootFailureCooldown())
 	}
 }
 

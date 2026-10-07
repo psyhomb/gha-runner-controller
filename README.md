@@ -219,6 +219,7 @@ so stale or misspelled keys fail loudly. Quick map:
 | `vm.minRunners` | minimum idle runners kept registered (0 = pure on-demand); counts toward maxRunners | 0 |
 | `vm.maxRunners` | hard cap on total VMs (busy + idle + booting) | 2 |
 | `vm.ttlMinutes` | force-delete VMs busy longer than this (stuck job) | 90 |
+| `vm.bootFailureThreshold` / `vm.bootFailureCooldownMinutes` | boot-failure backoff: scale-up pauses after this many consecutive boot failures, for this many minutes; one success resets | 3 / 5 |
 | `vm.netSoftnet` | enable Softnet networking - see Networking (Softnet) below; requires the softnet binary | `false` |
 | `vm.netSoftnetAllow` | additional allow rules on top of the default policy below - e.g. a LAN package registry | `[]` |
 | `vm.netSoftnetBlock` | additional block rules; `["0.0.0.0/0"]` = default-deny egress, relaxed by allow entries | `[]` |
