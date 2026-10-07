@@ -73,7 +73,16 @@ type Controller struct {
 	// the demand signal (broker statistics) does not decay on its own.
 	bootFails         int
 	bootCooldownUntil time.Time
+
+	// Scaling-log latch: reconcile runs on a single goroutine, so a plain
+	// field suffices; reset when the state goes quiet so the next burst logs.
+	lastScaling   scalingState
+	scalingLogged bool
 }
+
+// scalingState is the logged scaling tuple; a line is emitted only when it
+// changes (or on the first non-quiet tick after a quiet period).
+type scalingState struct{ inFlight, busy, idle, total, up, down int }
 
 // vmState tracks one VM's lifecycle. All VMs are fungible: a VM may end up
 // serving any job routed to the scale set.
@@ -351,15 +360,22 @@ func (c *Controller) reconcile(ctx context.Context) {
 	scaleDown = min(scaleDown, len(reap))
 
 	// Telemetry: when there is anything to do, the inputs and outputs of
-	// PlanScale answer "why is (no) VM starting/stopping" in one line.
-	if inFlight > 0 || scaleUp > 0 || scaleDown > 0 {
+	// PlanScale answer "why is (no) VM starting/stopping" in one line. Logged
+	// on state change only - a long-running job would otherwise repeat the
+	// identical line every tick.
+	cur := scalingState{inFlight, busy, len(idleNames), total, scaleUp, scaleDown}
+	if cur.inFlight == 0 && cur.up == 0 && cur.down == 0 {
+		c.scalingLogged = false
+	} else if !c.scalingLogged || c.lastScaling != cur {
 		slog.Info("scaling",
-			"inFlight", inFlight,
-			"busy", busy,
-			"idle", len(idleNames),
-			"totalVMs", total,
-			"scaleUp", scaleUp,
-			"scaleDown", scaleDown)
+			"inFlight", cur.inFlight,
+			"busy", cur.busy,
+			"idle", cur.idle,
+			"totalVMs", cur.total,
+			"scaleUp", cur.up,
+			"scaleDown", cur.down)
+		c.lastScaling = cur
+		c.scalingLogged = true
 	}
 
 	for i := 0; i < scaleUp; i++ {

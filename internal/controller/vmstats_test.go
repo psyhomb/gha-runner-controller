@@ -1,6 +1,10 @@
 package controller
 
 import (
+	"bytes"
+	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -96,5 +100,45 @@ func TestBootFailureBackoff(t *testing.T) {
 	c.noteBootSuccess()
 	if _, _, paused := c.scaleUpPaused(); paused {
 		t.Fatal("a successful registration should reset the backoff")
+	}
+}
+
+func TestScalingLogFiresOnChangeOnly(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(old)
+
+	count := func() int { return strings.Count(buf.String(), "msg=scaling") }
+
+	// 1 busy + 1 idle registered VM, one job in flight -> scaleUp=scaleDown=0,
+	// so reconcile never touches vmm (nil is fine).
+	c := &Controller{
+		src: fakeSrc{inFlight: 1, busy: map[string]bool{"vm-1": true}},
+		vms: vmMap("vm-1", "vm-2"),
+	}
+	c.reconcile(context.Background())
+	if got := count(); got != 1 {
+		t.Fatalf("first tick: %d scaling lines, want 1", got)
+	}
+	c.reconcile(context.Background())
+	if got := count(); got != 1 {
+		t.Fatalf("identical state: %d scaling lines, want 1 (no repeat)", got)
+	}
+	c.src = fakeSrc{inFlight: 2, busy: map[string]bool{"vm-1": true}}
+	c.reconcile(context.Background())
+	if got := count(); got != 2 {
+		t.Fatalf("changed state: %d scaling lines, want 2", got)
+	}
+	// A quiet tick logs nothing and resets the latch; the next burst logs once.
+	c.src = fakeSrc{inFlight: 0}
+	c.reconcile(context.Background())
+	if got := count(); got != 2 {
+		t.Fatalf("quiet tick: %d scaling lines, want 2 (silence)", got)
+	}
+	c.src = fakeSrc{inFlight: 1, busy: map[string]bool{"vm-1": true}}
+	c.reconcile(context.Background())
+	if got := count(); got != 3 {
+		t.Fatalf("post-quiet burst: %d scaling lines, want 3 (latch reset)", got)
 	}
 }
