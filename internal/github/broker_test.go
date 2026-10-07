@@ -2,8 +2,12 @@ package github
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func brokerFixture(t *testing.T, inner []map[string]any) []byte {
@@ -71,5 +75,77 @@ func TestParseJobMessagesRejectsUnknownWrapper(t *testing.T) {
 	})
 	if _, err := parseJobMessages(bytes.NewReader(data)); err == nil {
 		t.Error("expected error for unsupported message type")
+	}
+}
+
+func TestSameLabels(t *testing.T) {
+	mk := func(names ...string) []scaleSetLabel {
+		ls := make([]scaleSetLabel, len(names))
+		for i, n := range names {
+			ls[i] = scaleSetLabel{Type: "System", Name: n}
+		}
+		return ls
+	}
+	if !sameLabels(mk("a", "b"), mk("b", "a")) {
+		t.Error("reordered labels should compare equal")
+	}
+	if sameLabels(mk("a"), mk("a", "b")) {
+		t.Error("different lengths should not compare equal")
+	}
+	if sameLabels(mk("a", "b"), mk("a", "c")) {
+		t.Error("different names should not compare equal")
+	}
+}
+
+func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		stored    []string
+		wantPatch bool
+	}{
+		{"labels changed", []string{"self-hosted", "tahoe"}, true},
+		{"labels unchanged (reordered)", []string{"macOS", "self-hosted"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var patched bool
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.Method {
+				case http.MethodGet:
+					stored := make([]scaleSetLabel, len(tc.stored))
+					for i, n := range tc.stored {
+						stored[i] = scaleSetLabel{Type: "System", Name: n}
+					}
+					json.NewEncoder(w).Encode(map[string]any{
+						"count": 1,
+						"value": []scaleSet{{ID: 7, Name: "ss", RunnerGroupID: 1, Labels: stored}},
+					})
+				case http.MethodPatch:
+					patched = true
+					var body scaleSet
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Errorf("PATCH body decode: %v", err)
+					}
+					if len(body.Labels) != 2 || body.Labels[0].Type != "System" {
+						t.Errorf("PATCH labels = %+v, want 2 System labels", body.Labels)
+					}
+					json.NewEncoder(w).Encode(body)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL)
+				}
+			}))
+			defer srv.Close()
+			b := &BrokerClient{client: srv.Client(), baseURL: srv.URL, token: "t", tokenExp: time.Now().Add(time.Hour)}
+			id, err := b.GetOrCreateScaleSet(context.Background(), 1, "ss", []string{"self-hosted", "macOS"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id != 7 {
+				t.Errorf("scale set ID = %d, want 7", id)
+			}
+			if patched != tc.wantPatch {
+				t.Errorf("PATCH called = %v, want %v", patched, tc.wantPatch)
+			}
+		})
 	}
 }

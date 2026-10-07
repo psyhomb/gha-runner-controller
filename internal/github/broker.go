@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -153,8 +154,10 @@ type scaleSet struct {
 }
 
 // GetOrCreateScaleSet returns the ID of the named scale set in the given
-// runner group, creating it (with the given labels) when absent. Scale sets
-// receive JobAvailable messages even with zero runners (scale-from-zero).
+// runner group, creating it (with the given labels) when absent. When the
+// scale set exists, its labels are reconciled with the desired set (PATCH on
+// difference). Scale sets receive JobAvailable messages even with zero
+// runners (scale-from-zero).
 func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, name string, labels []string) (int, error) {
 	q := url.Values{"runnerGroupId": {strconv.Itoa(groupID)}, "name": {name}}
 	var list struct {
@@ -164,14 +167,24 @@ func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, nam
 	if err := b.doActionsService(ctx, http.MethodGet, scaleSetEndpoint+"?"+q.Encode(), nil, http.StatusOK, &list); err != nil {
 		return 0, fmt.Errorf("broker: get scale set %q: %w", name, err)
 	}
+	ls := make([]scaleSetLabel, 0, len(labels))
+	for _, l := range labels {
+		ls = append(ls, scaleSetLabel{Type: "System", Name: l})
+	}
 	switch list.Count {
 	case 1:
-		return list.Value[0].ID, nil
-	case 0:
-		ls := make([]scaleSetLabel, 0, len(labels))
-		for _, l := range labels {
-			ls = append(ls, scaleSetLabel{Type: "System", Name: l})
+		existing := list.Value[0]
+		if !sameLabels(existing.Labels, ls) {
+			body, _ := json.Marshal(scaleSet{Name: name, RunnerGroupID: groupID, Labels: ls})
+			var updated scaleSet
+			path := fmt.Sprintf("%s/%d", scaleSetEndpoint, existing.ID)
+			if err := b.doActionsService(ctx, http.MethodPatch, path, bytes.NewReader(body), http.StatusOK, &updated); err != nil {
+				return 0, fmt.Errorf("broker: update scale set %q labels: %w", name, err)
+			}
+			slog.Info("scale set labels updated", "name", name, "old", labelNames(existing.Labels), "new", labels)
 		}
+		return existing.ID, nil
+	case 0:
 		body, _ := json.Marshal(scaleSet{Name: name, RunnerGroupID: groupID, Labels: ls})
 		var created scaleSet
 		if err := b.doActionsService(ctx, http.MethodPost, scaleSetEndpoint, bytes.NewReader(body), http.StatusOK, &created); err != nil {
@@ -181,6 +194,33 @@ func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, nam
 	default:
 		return 0, fmt.Errorf("broker: multiple runner scale sets named %q", name)
 	}
+}
+
+// sameLabels reports whether two label lists hold the same names, order and
+// duplicates aside.
+func sameLabels(a, b []scaleSetLabel) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, l := range a {
+		seen[l.Name]++
+	}
+	for _, l := range b {
+		seen[l.Name]--
+		if seen[l.Name] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func labelNames(ls []scaleSetLabel) []string {
+	names := make([]string, len(ls))
+	for i, l := range ls {
+		names[i] = l.Name
+	}
+	return names
 }
 
 // ---- message sessions ----
