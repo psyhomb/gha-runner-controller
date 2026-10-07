@@ -61,7 +61,7 @@ reason.
 
 ## One-time setup
 
-Host prerequisites on the tart host (macOS 26+):
+Host prerequisites on the tart host (softnet requires macOS 26+):
 
 ```bash
 brew install openai/tools/tart
@@ -183,6 +183,17 @@ tar xzf gha-runner-controller-darwin-arm64.tar.gz
 (Already downloaded via a browser? `xattr -d com.apple.quarantine
 gha-runner-controller` clears the flag.)
 
+## CLI flags
+
+| Flag | Meaning |
+|---|---|
+| `-config <path>` | YAML config path (search order below) |
+| `-version` | print version and exit |
+| `-gen-config` | print the default config (every parameter documented inline) to stdout and exit |
+| `-delete-runner-scale-sets <names>` | delete comma-separated runner scale sets, then exit (see Deleting runner scale sets) |
+| `-runner-group-id <id>` | runner group for the delete lookup - only with `-delete-runner-scale-sets` |
+| `-help` | print usage and exit |
+
 ## Configuration (config.yaml)
 
 Config search order: explicit `-config` > `./config.yaml` (current
@@ -241,7 +252,7 @@ The plist in `deploy/` is a template (`__REMOTE_USER__` / `__REMOTE_HOME__`
 placeholders). On the tart host itself:
 
 ```bash
-task render   # writes rendered/local.gha-runner-controller.plist
+task render   # writes rendered/ (plist + config.yaml)
 sudo cp rendered/local.gha-runner-controller.plist /Library/LaunchDaemons/
 sudo chown root:wheel /Library/LaunchDaemons/local.gha-runner-controller.plist
 sudo chmod 644 /Library/LaunchDaemons/local.gha-runner-controller.plist
@@ -292,28 +303,26 @@ jobs carrying your custom label get VMs).
 
 Runner scale sets are an org concept, so the controller requires **org scope**
 (`github.scope: org`, or auto-detected via `GET /users/{owner}`). Runners
-register into the scale set; the app needs *Actions: Read* + *Self-hosted
-runners: Read & write*. Personal accounts (repo scope) are not supported.
+register into the scale set; the app needs only *Self-hosted runners: Read &
+write*. Personal accounts (repo scope) are not supported.
 
 ## Project layout
 
 ```
 cmd/gha-runner-controller/   main - thin entrypoint (flags, wiring, signals)
-internal/config/             YAML config, validation, defaults (strict decoding)
+internal/config/             YAML config, validation, defaults, embedded config template (strict decoding)
 internal/github/             GitHub App client (JWT, installation tokens, REST + broker)
 internal/jobsource/          BrokerSource - scale-set long-poll, statistics-driven demand
 internal/vm/                 tart CLI wrapper + in-process SSH guest access (x/crypto/ssh)
 internal/controller/         reconcile loop, scaling, VM lifecycle
-deploy/                      deployment assets - plist template + config template
+deploy/                      deployment assets - plist template
 ```
 
 Dependencies flow one way, no cycles: github <- jobsource <- controller;
 vm -> controller; config is a leaf imported by all.
 
-## Project layout is internal-only
-
-All packages live under `internal/` - nothing here is meant to be imported by
-other projects, and Go enforces that.
+All packages live under `internal/` - nothing here is meant to be imported
+by other projects, and Go enforces that.
 
 ## Scaling (`vm.minRunners` and `vm.maxRunners`)
 
@@ -370,7 +379,7 @@ are a non-issue at any org size.
   set. So both of these reach the scale set:
 
   ```yaml
-  runs-on: mac-mini-1-ephemeral-vm-scale-set   # precise: the name matches one set only
+   runs-on: mac-mini-1-ephemeral-vm-scale-set-1   # precise: the name matches one set only
   runs-on: [self-hosted, macOS, ARM64]          # generic: matches by label subset
   ```
 
@@ -397,7 +406,10 @@ are a non-issue at any org size.
     deleted.
 - On startup the controller creates (or reuses) the runner scale set named
   `jobs.broker.scaleSetName` (required - no default). The scale set name is
-  automatically added to the effective label set.
+  automatically added to the effective label set. Scale set labels are
+  immutable: when the configured labels drift, the controller deletes and
+  recreates the scale set (after the startup fleet cleanup, so no runners
+  block the delete).
 - Every delivered batch is logged at INFO (`broker: message batch` with
   per-type event counts plus the statistics) - the first thing to check when
   jobs are not picked up: batches arriving means delivery works; silence
@@ -422,7 +434,9 @@ are a non-issue at any org size.
 Discovery is message-driven; the only remaining REST calls are runner
 deregistration, a per-VM registration check (3-min never-registered
 backstop), and token refresh - all far below the GitHub App 5,000
-requests/hour budget at any org size.
+requests/hour budget at any org size. Startup scale-set setup (lookup,
+create, label-drift recreate) goes over the actions service, not the REST
+API.
 
 ## Deleting runner scale sets
 
@@ -436,12 +450,14 @@ Deletes the named scale sets via the same actions-service path the
 controller uses - no `gh` CLI or PAT needed, and no tart required on the
 machine. Names resolve within a runner group (unique per group, not per
 org): the group comes from `--runner-group-id`, else `runner.groupID` from
-the config, else 1 (the "Default" group). Each failure (e.g. **422 - the
-scale set still has registered runners**) is printed in full with the error
-code to stderr; the command exits 1 if any delete failed. Successes are
-logged and independent per name. Note: if the deleted name is the
-configured `jobs.broker.scaleSetName`, the controller recreates it on the
-next start.
+the config, else 1 (the "Default" group). Deleting a non-empty scale set is
+allowed: its runners are orphaned (no more job routing) and removed by
+GitHub's runner GC (ephemeral runners offline >1 day; JIT runners that
+never ran a job are auto-removed). Each failure (e.g. scale set not found)
+is printed in full with the error code to stderr; the command exits 1 if
+any delete failed. Successes are logged and independent per name. Note: if
+the deleted name is the configured `jobs.broker.scaleSetName`, the
+controller recreates it on the next start.
 
 ## Troubleshooting
 
