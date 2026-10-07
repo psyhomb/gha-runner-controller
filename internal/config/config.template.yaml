@@ -78,6 +78,14 @@ vm:
   # Idle VMs have no TTL. Default: 90.
   ttlMinutes: 90
 
+  # Boot-failure backoff: after bootFailureThreshold CONSECUTIVE boot
+  # failures (clone/set/start/IP/SSH/JIT/registration), scale-up pauses for
+  # bootFailureCooldownMinutes (the demand signal does not decay on its own,
+  # so a persistent misconfiguration would otherwise thrash the host). One
+  # successful registration resets the counter. Defaults: 3 / 5.
+  bootFailureThreshold: 3
+  bootFailureCooldownMinutes: 5
+
   # Software networking via Softnet (tart --net-softnet) instead of the
   # default vmnet shared NAT. Two wins: (1) isolation - a userspace packet
   # filter blocks ARP/IP/MAC spoofing and, by default, everything except

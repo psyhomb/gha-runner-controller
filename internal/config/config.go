@@ -61,6 +61,11 @@ type VMConfig struct {
 	MaxRunners int    `yaml:"maxRunners"` // hard cap on total VMs (busy + idle + booting)
 	TTLMinutes int    `yaml:"ttlMinutes"` // force-delete VMs busy longer than this (stuck job)
 
+	// Boot-failure backoff: scale-up pauses after BootFailureThreshold
+	// consecutive boot failures, for BootFailureCooldownMinutes.
+	BootFailureThreshold       int `yaml:"bootFailureThreshold"`       // default 3
+	BootFailureCooldownMinutes int `yaml:"bootFailureCooldownMinutes"` // default 5
+
 	// Softnet userspace networking (tart --net-softnet*); enabled only when
 	// NetSoftnet is true - the allow/block lists are ignored otherwise.
 	NetSoftnet      bool     `yaml:"netSoftnet"`
@@ -102,6 +107,24 @@ func (c Config) TTL() time.Duration {
 		return 90 * time.Minute
 	}
 	return time.Duration(c.VM.TTLMinutes) * time.Minute
+}
+
+// EffectiveBootFailureThreshold is the number of consecutive VM boot
+// failures after which scale-up pauses (default 3).
+func (c Config) EffectiveBootFailureThreshold() int {
+	if c.VM.BootFailureThreshold <= 0 {
+		return 3
+	}
+	return c.VM.BootFailureThreshold
+}
+
+// BootFailureCooldown is how long scale-up stays paused after repeated
+// boot failures (default 5 minutes).
+func (c Config) BootFailureCooldown() time.Duration {
+	if c.VM.BootFailureCooldownMinutes <= 0 {
+		return 5 * time.Minute
+	}
+	return time.Duration(c.VM.BootFailureCooldownMinutes) * time.Minute
 }
 
 func (c Config) EffectiveMaxRunners() int {
