@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -159,6 +160,52 @@ func TestGetOrCreateScaleSetReconcilesLabels(t *testing.T) {
 			}
 			if created != tc.wantCreate {
 				t.Errorf("POST called = %v, want %v", created, tc.wantCreate)
+			}
+		})
+	}
+}
+
+func TestDeleteScaleSetByName(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		count        int
+		deleteStatus int
+		wantDelete   bool
+		wantErr      string
+	}{
+		{"deleted", 1, http.StatusNoContent, true, ""},
+		{"not found", 0, http.StatusNoContent, false, "not found"},
+		{"in use - 422", 1, http.StatusUnprocessableEntity, true, "422 Unprocessable Entity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var deleted bool
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.Method {
+				case http.MethodGet:
+					sets := []scaleSet{}
+					if tc.count > 0 {
+						sets = append(sets, scaleSet{ID: 7, Name: "ss", RunnerGroupID: 1})
+					}
+					json.NewEncoder(w).Encode(map[string]any{"count": tc.count, "value": sets})
+				case http.MethodDelete:
+					deleted = true
+					w.WriteHeader(tc.deleteStatus)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL)
+				}
+			}))
+			defer srv.Close()
+			b := &BrokerClient{client: srv.Client(), baseURL: srv.URL, token: "t", tokenExp: time.Now().Add(time.Hour)}
+			err := b.DeleteScaleSetByName(context.Background(), 1, "ss")
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("error = %v, want it to contain %q", err, tc.wantErr)
+			}
+			if deleted != tc.wantDelete {
+				t.Errorf("DELETE called = %v, want %v", deleted, tc.wantDelete)
 			}
 		})
 	}

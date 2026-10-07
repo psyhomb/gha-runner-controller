@@ -214,6 +214,32 @@ func (b *BrokerClient) GetOrCreateScaleSet(ctx context.Context, groupID int, nam
 	}
 }
 
+// DeleteScaleSetByName resolves the named scale set in the runner group and
+// deletes it. The error carries the full server response (status + body),
+// e.g. 422 when runners are still registered.
+func (b *BrokerClient) DeleteScaleSetByName(ctx context.Context, groupID int, name string) error {
+	q := url.Values{"runnerGroupId": {strconv.Itoa(groupID)}, "name": {name}}
+	var list struct {
+		Count int        `json:"count"`
+		Value []scaleSet `json:"value"`
+	}
+	if err := b.doActionsService(ctx, http.MethodGet, scaleSetEndpoint+"?"+q.Encode(), nil, http.StatusOK, &list); err != nil {
+		return fmt.Errorf("broker: get scale set %q: %w", name, err)
+	}
+	switch list.Count {
+	case 1:
+		path := fmt.Sprintf("%s/%d", scaleSetEndpoint, list.Value[0].ID)
+		if err := b.doActionsService(ctx, http.MethodDelete, path, nil, http.StatusNoContent, nil); err != nil {
+			return fmt.Errorf("broker: delete scale set %q: %w", name, err)
+		}
+		return nil
+	case 0:
+		return fmt.Errorf("broker: scale set %q not found", name)
+	default:
+		return fmt.Errorf("broker: multiple runner scale sets named %q", name)
+	}
+}
+
 // createScaleSet creates the scale set with runner self-update disabled
 // (runners are ephemeral - a mid-job update is pointless).
 func (b *BrokerClient) createScaleSet(ctx context.Context, groupID int, name string, labels []scaleSetLabel) (*scaleSet, error) {
