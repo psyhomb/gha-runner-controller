@@ -38,7 +38,7 @@ runner:
   # the controller deletes and recreates the scale set at startup (after the
   # fleet cleanup, so no runners block the delete). Queued jobs targeting the
   # old scale set may be affected - change labels during quiet periods.
-  labels: [self-hosted, macOS, ARM64, tahoe]
+  labels: [self-hosted, macOS, ARM64]
 
   # Runner group the runners register into (org-level groups only). The group
   # also pre-filters which repos may use these runners server-side.
