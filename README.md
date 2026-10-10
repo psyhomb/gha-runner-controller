@@ -143,8 +143,8 @@ task install    # builds, deploys binary, renders + installs plist and config (i
 Remote install (from your dev machine to another tart host):
 
 ```bash
-ssh-copy-id admin@myhost        # key auth, no more SSH password prompts
-REMOTE_HOST=myhost task install # REMOTE_USER defaults to the local user; override if needed
+ssh-copy-id -i ~/.ssh/gha-runner-controller admin@myhost  # key auth, no more SSH password prompts
+REMOTE_HOST=myhost task install                           # REMOTE_USER defaults to the local user; override if needed
 ```
 
 If `app.pem` (the GitHub App private key) is present in the project
