@@ -50,8 +50,10 @@ runner:
 
 # The tart VM fleet - what to boot and how many.
 vm:
-  # Tart image to clone every VM from. The image must contain the runner
-  # binaries and the SSH user below. Required.
+  # Tart image to clone every VM from (tart pulls the OCI reference on first
+  # clone: tart clone ghcr.io/cirruslabs/macos-tahoe-xcode:latest <name>).
+  # The image must contain the runner binaries and the SSH user below.
+  # Required.
   baseImage: macos-tahoe-xcode-base
 
   # Per-VM CPU count / memory in MB. 0 = keep the image defaults.

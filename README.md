@@ -108,14 +108,11 @@ registered runners, so it would silently strand jobs until the 24h timeout).
 ```bash
 # on the tart host
 ssh-keygen -t ed25519 -f ~/.ssh/gha-runner-controller -N ''
-tart clone macos-tahoe-xcode macos-tahoe-xcode-gha-base
-tart run macos-tahoe-xcode-gha-base --no-graphics &
-tart ip --wait 60 macos-tahoe-xcode-gha-base
-# ssh in with the admin password, then:
-#   mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys
-#   (paste the .pub contents), chmod 600 ~/.ssh/authorized_keys
-# verify: ssh -i ~/.ssh/gha-runner-controller admin@<ip> true
-tart stop macos-tahoe-xcode-gha-base
+tart clone ghcr.io/cirruslabs/macos-tahoe-xcode:latest macos-tahoe-xcode-base
+tart run macos-tahoe-xcode-base --no-graphics &
+ssh-copy-id -i ~/.ssh/gha-runner-controller admin@$(tart ip --wait 60 macos-tahoe-xcode-base)   # password: admin
+# verify: ssh -i ~/.ssh/gha-runner-controller admin@$(tart ip macos-tahoe-xcode-base) true
+tart stop macos-tahoe-xcode-base
 ```
 
 Linux base images work too (tart supports Linux VMs). The guest contract is
@@ -143,8 +140,8 @@ task install    # builds, deploys binary, renders + installs plist and config (i
 Remote install (from your dev machine to another tart host):
 
 ```bash
-ssh-copy-id -i ~/.ssh/gha-runner-controller admin@myhost  # key auth, no more SSH password prompts
-REMOTE_HOST=myhost task install                           # REMOTE_USER defaults to the local user; override if needed
+ssh-copy-id admin@myhost          # key auth, no more SSH password prompts
+REMOTE_HOST=myhost task install   # REMOTE_USER defaults to the local user; override if needed
 ```
 
 If `app.pem` (the GitHub App private key) is present in the project
